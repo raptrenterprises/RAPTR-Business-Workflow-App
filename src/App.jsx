@@ -28,8 +28,8 @@ export default function RaptrApp() {
     <div style={{ minHeight: "100vh", background: STYLES.parchment, fontFamily: "system-ui, -apple-system, sans-serif", color: STYLES.ink }}>
       <header style={{ background: STYLES.ink, color: STYLES.parchment, padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ fontSize: 11, letterSpacing: 3, color: STYLES.brass, textTransform: "uppercase", fontFamily: "Georgia, serif" }}>RAPTR Mysteries — Ops</div>
-          <div style={{ fontSize: 20, fontFamily: "Georgia, serif" }}>Case Log — {currentUser}</div>
+          <div style={{ fontSize: 11, letterSpacing: 3, color: STYLES.brass, textTransform: "uppercase", fontFamily: "Georgia, serif" }}>RAPTR Mysteries</div>
+          <div style={{ fontSize: 20, fontFamily: "Georgia, serif" }}>{currentUser}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" />
