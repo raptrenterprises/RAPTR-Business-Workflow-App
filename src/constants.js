@@ -6,6 +6,17 @@ export const STYLES = {
   slate: "#5B6675",
   green: "#3E6B4F",
   amber: "#B8860B",
+  blue: "#3B6E8F",
+  purple: "#6B4E8E",
+};
+
+export const EVENT_CATEGORIES = ["Weekly Call", "RAPTRMeet", "Playtest", "Social Media Post Goes Live", "Other"];
+export const EVENT_CATEGORY_COLOR = {
+  "Weekly Call": STYLES.blue,
+  "RAPTRMeet": STYLES.purple,
+  "Playtest": STYLES.green,
+  "Social Media Post Goes Live": STYLES.amber,
+  "Other": STYLES.slate,
 };
 
 // Map of Supabase auth email -> display name used throughout the app.
@@ -40,7 +51,15 @@ export const RECURRENCE_OPTIONS = [
   { value: "monthly", label: "Monthly" },
 ];
 
-export function uid() { if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID(); return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3) | 0x8; return v.toString(16); }); }
+export function uid() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  // Fallback for older browsers without crypto.randomUUID
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 export function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
