@@ -35,7 +35,10 @@ create table if not exists threads (
 create table if not exists events (
   id uuid primary key default gen_random_uuid(),
   title text not null,
+  description text,
+  category text not null default 'Other', -- 'Weekly Call' | 'RAPTRMeet' | 'Playtest' | 'Social Media Post Goes Live' | 'Other'
   event_date date not null,
+  end_date date not null default (event_date), -- multi-day events: last day of the event, inclusive
   event_time time,
   all_day boolean not null default true,
   created_by text not null,
