@@ -11,7 +11,7 @@ create table if not exists tasks (
   created_by text not null,
   created_at timestamptz not null default now(),
   importance text not null default 'Medium',
-  urgency text not null default 'Medium',
+  urgency text default 'Medium', -- nullable: null means urgency is derived from due_date instead
   due_date date,
   recurrence text not null default 'none'
 );
@@ -23,7 +23,7 @@ create table if not exists threads (
   created_by text not null,
   created_at timestamptz not null default now(),
   importance text not null default 'Medium',
-  urgency text not null default 'Medium',
+  urgency text default 'Medium', -- nullable: null means urgency is derived from due_date instead
   status text not null default 'active',   -- 'active' | 'complete'
   turn text,                                -- username whose turn it is to act
   seen_by text[] not null default '{}',
@@ -41,6 +41,8 @@ create table if not exists events (
   end_date date not null default (event_date), -- multi-day events: last day of the event, inclusive
   event_time time,
   all_day boolean not null default true,
+  recurrence text not null default 'none', -- 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+  recurrence_end date, -- null = repeats indefinitely
   created_by text not null,
   created_at timestamptz not null default now()
 );

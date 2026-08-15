@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#1B2430" />
+    <meta name="theme-color" content="#2A2422" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
@@ -12,9 +12,30 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="RAPTR" />
     <title>RAPTR Mysteries</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden; /* prevents any component's overflow from pushing the whole page sideways */
+      }
+      /* Gym challenge participant panels: side-by-side on wider screens,
+         stacked on narrow phones so nothing gets pushed off-screen. */
+      .gym-participants {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1fr 1fr;
+      }
+      @media (max-width: 640px) {
+        .gym-participants {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
   </head>
   <body style="margin:0">
-    <div id="root"></div>
+    <div id="root" style="max-width: 100%; overflow-x: hidden;"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

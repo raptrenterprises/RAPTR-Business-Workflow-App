@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Save, X, CalendarDays, ClipboardList, MessageSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Save, X, CalendarDays, ClipboardList, MessageSquare, SlidersHorizontal, Repeat } from "lucide-react";
 import {
   STYLES, uid, todayStr, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, toStr,
-  importanceColor, urgencyColor, selectStyle, EVENT_CATEGORIES, EVENT_CATEGORY_COLOR,
+  importanceColor, urgencyColor, selectStyle, EVENT_CATEGORIES, EVENT_CATEGORY_COLOR, effectiveUrgency,
+  eventCoversDay, EVENT_RECURRENCE_OPTIONS,
 } from "../constants";
 import { Badge, CenterMsg, ErrorBar } from "../components/Shared";
 import { fetchEvents, insertEvent, updateEvent, deleteEventRow, subscribeEvents } from "../lib/eventsApi";
@@ -15,23 +16,22 @@ function isOpen(item) {
   return item.kind === "task" ? !item.completed : item.status !== "complete";
 }
 
-// The date each item should surface on the calendar per urgency rule,
-// or null if it doesn't get a day-specific slot (Medium/Low/N/A are handled separately).
+// The date each item should surface on the calendar: an explicit due date
+// always wins; otherwise items that are *currently* Immediate or High
+// urgency (recomputed live via effectiveUrgency) surface on today's cell.
+// Medium/Low/N/A items without a due date don't get a day-specific slot —
+// see weekBucket/monthBucket below.
 function triggerDateFor(item) {
-  if (item.dueDate) return item.dueDate; // an explicit due date always wins
-  if (item.urgency === "Critical") return todayStr();
-  if (item.urgency === "High") return addDays(item.createdAt, 2);
+  if (item.dueDate) return item.dueDate;
+  const urg = effectiveUrgency(item);
+  if (urg === "Immediate" || urg === "High") return todayStr();
   return null;
 }
 
-function eventCoversDay(ev, dateStr) {
-  return dateStr >= ev.date && dateStr <= (ev.endDate || ev.date);
-}
-
-const emptyDraft = (date) => ({ title: "", description: "", category: "Other", date, endDate: date, time: "", allDay: true });
+const emptyDraft = (date) => ({ title: "", description: "", category: "Other", date, endDate: date, time: "", allDay: true, recurrence: "none", recurrenceEnd: "" });
 
 export default function CalendarSection({ currentUser, users }) {
-  const [view, setView] = useState("month"); // "day" | "week" | "month"
+  const [view, setView] = useState("week"); // "day" | "week" | "month"
   const [refDate, setRefDate] = useState(todayStr());
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -42,6 +42,9 @@ export default function CalendarSection({ currentUser, users }) {
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [error, setError] = useState("");
+  const [includeShared, setIncludeShared] = useState(false);
+  const [includeAll, setIncludeAll] = useState(false);
+  const [showScopeMenu, setShowScopeMenu] = useState(false);
 
   const reloadEvents = useCallback(async () => {
     try { setEvents(await fetchEvents()); } catch (e) { setError("Couldn't load events: " + e.message); }
@@ -61,19 +64,37 @@ export default function CalendarSection({ currentUser, users }) {
     return () => { u1(); u2(); u3(); };
   }, [reloadEvents, reloadTasks, reloadThreads]);
 
-  const openItems = useMemo(() => [...tasks, ...threads].filter(isOpen), [tasks, threads]);
+  // Default scope: your own tasks + threads currently waiting on you.
+  // The filter icon can widen this to include shared tasks and/or everything.
+  const openItems = useMemo(() => {
+    const open = [...tasks, ...threads].filter(isOpen);
+    if (includeAll) return open;
+    return open.filter((it) => {
+      if (it.kind === "task") {
+        if (it.owner === currentUser) return true;
+        if (includeShared && it.owner === "shared") return true;
+        return false;
+      }
+      // thread: only ones currently waiting on you, by default
+      return it.turn === currentUser;
+    });
+  }, [tasks, threads, currentUser, includeShared, includeAll]);
 
   const dayItemsFor = useCallback(
     (dateStr) => {
       const dayEvents = events.filter((e) => eventCoversDay(e, dateStr));
-      const dayTasks = openItems.filter((it) => it.urgency !== "N/A" && it.urgency !== "Medium" && it.urgency !== "Low" && triggerDateFor(it) === dateStr);
+      const dayTasks = openItems.filter((it) => triggerDateFor(it) === dateStr);
       return { events: dayEvents, tasks: dayTasks };
     },
     [events, openItems]
   );
 
-  const weekBucket = useMemo(() => openItems.filter((it) => it.urgency === "Medium"), [openItems]);
-  const monthBucket = useMemo(() => openItems.filter((it) => it.urgency === "Low"), [openItems]);
+  // Medium/Low items with no due date don't get a specific day — they show
+  // in a dedicated panel instead (only while viewing that granularity).
+  // Due-date items with a computed Medium/Low urgency already appear on
+  // their actual due date via dayItemsFor, so they're excluded here.
+  const weekBucket = useMemo(() => openItems.filter((it) => !it.dueDate && effectiveUrgency(it) === "Medium"), [openItems]);
+  const monthBucket = useMemo(() => openItems.filter((it) => !it.dueDate && effectiveUrgency(it) === "Low"), [openItems]);
 
   async function addEvent() {
     const title = draft.title.trim();
@@ -82,6 +103,7 @@ export default function CalendarSection({ currentUser, users }) {
       id: uid(), title, description: draft.description.trim(), category: draft.category,
       date: draft.date, endDate: draft.endDate && draft.endDate >= draft.date ? draft.endDate : draft.date,
       time: draft.allDay ? null : draft.time || null, allDay: draft.allDay,
+      recurrence: draft.recurrence || "none", recurrenceEnd: draft.recurrenceEnd || null,
       createdBy: currentUser, createdAt: new Date().toISOString(),
     };
     setDraft(emptyDraft(draft.date));
@@ -91,7 +113,7 @@ export default function CalendarSection({ currentUser, users }) {
 
   function startEditEvent(ev) {
     setEditingId(ev.id);
-    setEditDraft({ title: ev.title, description: ev.description || "", category: ev.category || "Other", date: ev.date, endDate: ev.endDate || ev.date, time: ev.time || "", allDay: ev.allDay });
+    setEditDraft({ title: ev.title, description: ev.description || "", category: ev.category || "Other", date: ev.date, endDate: ev.endDate || ev.date, time: ev.time || "", allDay: ev.allDay, recurrence: ev.recurrence || "none", recurrenceEnd: ev.recurrenceEnd || "" });
   }
 
   async function saveEditEvent(id) {
@@ -102,6 +124,7 @@ export default function CalendarSection({ currentUser, users }) {
         title, description: editDraft.description.trim(), category: editDraft.category,
         date: editDraft.date, endDate: editDraft.endDate && editDraft.endDate >= editDraft.date ? editDraft.endDate : editDraft.date,
         time: editDraft.allDay ? null : editDraft.time || null, allDay: editDraft.allDay,
+        recurrence: editDraft.recurrence || "none", recurrenceEnd: editDraft.recurrenceEnd || null,
       });
       setEditingId(null); setEditDraft(null); reloadEvents();
     } catch (e) { setError("Couldn't save event: " + e.message); }
@@ -154,6 +177,25 @@ export default function CalendarSection({ currentUser, users }) {
           <button onClick={() => { setComposing((c) => !c); setDraft(emptyDraft(refDate)); }} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
             <Plus size={14} /> Event
           </button>
+          <div style={{ position: "relative" }}>
+            <button onClick={() => setShowScopeMenu((s) => !s)} title="Filter what's shown" style={{ ...selectStyle(), cursor: "pointer", display: "flex", alignItems: "center", gap: 5, background: (includeShared || includeAll) ? STYLES.brass + "33" : "#fff" }}>
+              <SlidersHorizontal size={13} /> Filter
+            </button>
+            {showScopeMenu && (
+              <>
+                <div onClick={() => setShowScopeMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 20 }} />
+                <div style={{ position: "absolute", top: "110%", right: 0, zIndex: 30, background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 12, width: 240, boxShadow: "0 6px 20px rgba(0,0,0,0.18)", fontSize: 13 }}>
+                  <div style={{ color: STYLES.slate, marginBottom: 8 }}>By default this shows only your tasks and threads waiting on you.</div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+                    <input type="checkbox" checked={includeShared} disabled={includeAll} onChange={(e) => setIncludeShared(e.target.checked)} /> Include shared tasks
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input type="checkbox" checked={includeAll} onChange={(e) => setIncludeAll(e.target.checked)} /> Show everything (both people)
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {composing && <EventForm draft={draft} setDraft={setDraft} onSave={addEvent} onCancel={() => setComposing(false)} saveLabel="Add" />}
@@ -213,6 +255,17 @@ function EventForm({ draft, setDraft, onSave, onCancel, saveLabel }) {
           <input type="checkbox" checked={draft.allDay} onChange={(e) => setDraft({ ...draft, allDay: e.target.checked })} /> All day
         </label>
         {!draft.allDay && <input type="time" value={draft.time} onChange={(e) => setDraft({ ...draft, time: e.target.value })} style={selectStyle()} />}
+        <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 5 }}>
+          Repeats
+          <select value={draft.recurrence} onChange={(e) => setDraft({ ...draft, recurrence: e.target.value })} style={selectStyle()}>
+            {EVENT_RECURRENCE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </label>
+        {draft.recurrence !== "none" && (
+          <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 5 }}>
+            Repeat until <input type="date" value={draft.recurrenceEnd} min={draft.date} onChange={(e) => setDraft({ ...draft, recurrenceEnd: e.target.value })} style={selectStyle()} placeholder="Forever" />
+          </label>
+        )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button onClick={onSave} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "8px 14px", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 5 }}><Save size={13} /> {saveLabel}</button>
           <button onClick={onCancel} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "8px 10px", cursor: "pointer" }}><X size={14} /></button>
@@ -223,9 +276,10 @@ function EventForm({ draft, setDraft, onSave, onCancel, saveLabel }) {
 }
 
 function ItemChip({ item }) {
+  const urg = effectiveUrgency(item);
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, padding: "2px 6px", borderRadius: 4, background: `${urgencyColor(item.urgency)}18`, border: `1px solid ${urgencyColor(item.urgency)}55`, marginBottom: 3 }}>
-      {item.kind === "task" ? <ClipboardList size={10} color={urgencyColor(item.urgency)} /> : <MessageSquare size={10} color={urgencyColor(item.urgency)} />}
+    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, padding: "2px 6px", borderRadius: 4, background: `${urgencyColor(urg)}18`, border: `1px solid ${urgencyColor(urg)}55`, marginBottom: 3 }}>
+      {item.kind === "task" ? <ClipboardList size={10} color={urgencyColor(urg)} /> : <MessageSquare size={10} color={urgencyColor(urg)} />}
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
     </div>
   );
@@ -253,8 +307,8 @@ function BucketPanel({ title, items }) {
             <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
               {it.kind === "task" ? <ClipboardList size={13} color={STYLES.slate} /> : <MessageSquare size={13} color={STYLES.slate} />}
               <span style={{ flex: 1 }}>{it.title}</span>
+              <Badge label={`U: ${effectiveUrgency(it)}`} color={urgencyColor(effectiveUrgency(it))} />
               <Badge label={`I: ${it.importance}`} color={importanceColor(it.importance)} />
-              <Badge label={`U: ${it.urgency}`} color={urgencyColor(it.urgency)} />
             </div>
           ))}
         </div>
@@ -279,7 +333,10 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
               <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}14`, borderLeft: `4px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, border: `1px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}55`, borderLeftWidth: 4, borderRadius: 4, padding: "8px 10px" }}>
                 <CalendarDays size={14} color={EVENT_CATEGORY_COLOR[e.category] || STYLES.brass} />
                 <div style={{ flex: 1 }}>
-                  <div>{e.title} {e.endDate && e.endDate !== e.date && <span style={{ fontSize: 11, color: STYLES.slate }}>({e.date} → {e.endDate})</span>}</div>
+                  <div>
+                    {e.title} {e.endDate && e.endDate !== e.date && <span style={{ fontSize: 11, color: STYLES.slate }}>({e.date} → {e.endDate})</span>}
+                    {e.recurrence && e.recurrence !== "none" && <Repeat size={11} color={STYLES.slate} style={{ marginLeft: 6, verticalAlign: "middle" }} />}
+                  </div>
                   {e.description && <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 2 }}>{e.description}</div>}
                 </div>
                 {!e.allDay && e.time && <span style={{ fontSize: 12, color: STYLES.slate }}>{e.time}</span>}
@@ -301,7 +358,8 @@ function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView }) {
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return toStr(d); });
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(120px, 1fr))", gap: 8, overflowX: "auto" }}>
+      <div style={{ width: "100%", maxWidth: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(120px, 1fr))", gap: 8, width: "max-content", minWidth: "100%" }}>
         {days.map((d) => {
           const { events, tasks } = dayItemsFor(d);
           const isToday = d === todayStr();
@@ -316,6 +374,7 @@ function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView }) {
             </div>
           );
         })}
+        </div>
       </div>
       <BucketPanel title="This Week — Medium priority" items={weekBucket} />
     </>
@@ -349,7 +408,7 @@ function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView }) {
                 <div key={e.id} style={{ fontSize: 10, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `2px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "1px 4px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</div>
               ))}
               {tasks.length > 0 && (
-                <div style={{ fontSize: 10, color: urgencyColor(tasks[0].urgency), fontWeight: 700 }}>● {tasks.length} task{tasks.length > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 10, color: urgencyColor(effectiveUrgency(tasks[0])), fontWeight: 700 }}>● {tasks.length} task{tasks.length > 1 ? "s" : ""}</div>
               )}
             </div>
           );

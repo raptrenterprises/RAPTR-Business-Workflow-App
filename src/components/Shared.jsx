@@ -5,10 +5,11 @@ import {
   importanceColor, urgencyColor, selectStyle,
 } from "../constants";
 
-export function SectionButton({ active, onClick, icon, label }) {
+export function SectionButton({ active, onClick, icon, label, showDot }) {
   return (
-    <button onClick={onClick} style={{ background: active ? STYLES.brass : "transparent", border: `1px solid ${STYLES.brass}`, color: active ? STYLES.ink : STYLES.parchment, fontWeight: active ? 700 : 400, borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+    <button onClick={onClick} style={{ position: "relative", background: active ? STYLES.brass : "transparent", border: `1px solid ${STYLES.brass}`, color: active ? STYLES.ink : STYLES.parchment, fontWeight: active ? 700 : 400, borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
       {icon} {label}
+      {showDot && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: STYLES.wax, border: "1.5px solid " + STYLES.ink }} />}
     </button>
   );
 }
@@ -32,6 +33,28 @@ export function ImportanceSelect({ value, onChange }) {
   );
 }
 
+export function UrgencyOrDueDateField({ mode, setMode, urgency, setUrgency, dueDate, setDueDate }) {
+  const btnStyle = (active) => ({
+    padding: "6px 10px", fontSize: 12, border: "none", cursor: "pointer",
+    background: active ? STYLES.brass : "#fff", color: active ? STYLES.ink : STYLES.slate, fontWeight: active ? 700 : 400,
+  });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", border: `1px solid ${STYLES.ink}33`, borderRadius: 4, overflow: "hidden" }}>
+        <button type="button" onClick={() => setMode("urgency")} style={btnStyle(mode === "urgency")}>Set urgency</button>
+        <button type="button" onClick={() => setMode("dueDate")} style={btnStyle(mode === "dueDate")}>Set due date</button>
+      </div>
+      {mode === "urgency" ? (
+        <UrgencySelect value={urgency} onChange={setUrgency} />
+      ) : (
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
+          Due <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={selectStyle()} />
+        </label>
+      )}
+    </div>
+  );
+}
+
 export function UrgencySelect({ value, onChange }) {
   return (
     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
@@ -52,25 +75,25 @@ export function Legend() {
   return (
     <div style={{ marginBottom: 16 }}>
       <button onClick={() => setOpen(!open)} style={{ background: "transparent", border: `1px solid ${STYLES.slate}55`, color: STYLES.slate, borderRadius: 4, padding: "5px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-        <Info size={12} /> {open ? "Hide legend" : "Importance / Urgency legend"}
+        <Info size={12} /> {open ? "Hide legend" : "Urgency / Importance legend"}
       </button>
       {open && (
         <div style={{ marginTop: 8, background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 14, display: "flex", flexWrap: "wrap", gap: 24, fontSize: 12.5 }}>
           <div>
-            <div style={{ fontWeight: 700, marginBottom: 6, color: STYLES.ink }}>Importance</div>
-            {IMPORTANCE_LEVELS.slice().reverse().map((l) => (
+            <div style={{ fontWeight: 700, marginBottom: 6, color: STYLES.ink }}>Urgency</div>
+            {URGENCY_LEVELS.slice().reverse().map((l) => (
               <div key={l} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-                <span style={{ color: importanceColor(l), fontWeight: 700, minWidth: 60 }}>{l}</span>
-                <span style={{ color: STYLES.slate }}>{IMPORTANCE_LEGEND[l]}</span>
+                <span style={{ color: urgencyColor(l), fontWeight: 700, minWidth: 70 }}>{l}</span>
+                <span style={{ color: STYLES.slate }}>{URGENCY_LEGEND[l]}</span>
               </div>
             ))}
           </div>
           <div>
-            <div style={{ fontWeight: 700, marginBottom: 6, color: STYLES.ink }}>Urgency</div>
-            {URGENCY_LEVELS.slice().reverse().map((l) => (
+            <div style={{ fontWeight: 700, marginBottom: 6, color: STYLES.ink }}>Importance</div>
+            {IMPORTANCE_LEVELS.slice().reverse().map((l) => (
               <div key={l} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-                <span style={{ color: urgencyColor(l), fontWeight: 700, minWidth: 60 }}>{l}</span>
-                <span style={{ color: STYLES.slate }}>{URGENCY_LEGEND[l]}</span>
+                <span style={{ color: importanceColor(l), fontWeight: 700, minWidth: 70 }}>{l}</span>
+                <span style={{ color: STYLES.slate }}>{IMPORTANCE_LEGEND[l]}</span>
               </div>
             ))}
           </div>
@@ -85,22 +108,22 @@ export function SortFilterBar({ sortBy, setSortBy, minImportance, setMinImportan
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 16, fontSize: 13 }}>
       <span style={{ display: "flex", alignItems: "center", gap: 5, color: STYLES.slate }}><ArrowDownUp size={13} /> Sort</span>
       <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle()}>
-        <option value="priority">Priority (importance + urgency)</option>
-        <option value="importance">Importance</option>
+        <option value="priority">Priority (urgency + importance)</option>
         <option value="urgency">Urgency</option>
+        <option value="importance">Importance</option>
         {extraSort}
         <option value="newest">Newest</option>
         <option value="oldest">Oldest</option>
       </select>
-      <span style={{ color: STYLES.slate, marginLeft: 8 }}>Min importance</span>
-      <select value={minImportance} onChange={(e) => setMinImportance(e.target.value)} style={selectStyle()}>
-        <option>Any</option>
-        {IMPORTANCE_LEVELS.map((l) => <option key={l}>{l}</option>)}
-      </select>
-      <span style={{ color: STYLES.slate }}>Min urgency</span>
+      <span style={{ color: STYLES.slate, marginLeft: 8 }}>Min urgency</span>
       <select value={minUrgency} onChange={(e) => setMinUrgency(e.target.value)} style={selectStyle()}>
         <option>Any</option>
         {URGENCY_LEVELS.map((l) => <option key={l}>{l}</option>)}
+      </select>
+      <span style={{ color: STYLES.slate }}>Min importance</span>
+      <select value={minImportance} onChange={(e) => setMinImportance(e.target.value)} style={selectStyle()}>
+        <option>Any</option>
+        {IMPORTANCE_LEVELS.map((l) => <option key={l}>{l}</option>)}
       </select>
     </div>
   );

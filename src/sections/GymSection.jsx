@@ -172,7 +172,7 @@ export default function GymSection({ currentUser, users }) {
                   </div>
                 )}
 
-                <div style={{ display: "grid", gridTemplateColumns: users.length > 1 ? "1fr 1fr" : "1fr", gap: 16 }}>
+                <div className={users.length > 1 ? "gym-participants" : ""} style={users.length > 1 ? undefined : { display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
                   {users.map((u) => (
                     <ParticipantPanel key={u} challenge={c} user={u} weeks={weeks} currentWeek={currentWeek} onPatch={(patch) => patchParticipant(c, u, patch)} onLogWeighIn={(weekIdx, weight) => logWeighIn(c, u, weekIdx, weight)} onToggleWorkout={(dateStr) => toggleWorkoutDate(c, u, dateStr)} />
                   ))}

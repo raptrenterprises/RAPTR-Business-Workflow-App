@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { LogOut, ClipboardList, MessageSquare, CalendarDays, Dumbbell } from "lucide-react";
+import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell } from "lucide-react";
 import { STYLES, USERS, USER_DIRECTORY } from "./constants";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./Login";
+import ProfileMenu from "./components/ProfileMenu";
 import { SectionButton, CenterMsg } from "./components/Shared";
+import { useNavIndicators } from "./hooks/useNavIndicators";
 import TasksSection from "./sections/TasksSection";
 import ThreadsSection from "./sections/ThreadsSection";
 import CalendarSection from "./sections/CalendarSection";
@@ -11,7 +13,8 @@ import GymSection from "./sections/GymSection";
 
 export default function RaptrApp() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = signed out
-  const [section, setSection] = useState("tasks");
+  const [section, setSection] = useState("threads");
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -19,10 +22,14 @@ export default function RaptrApp() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  const currentUser = session
+    ? session.user.user_metadata?.display_name || USER_DIRECTORY[session.user.email] || session.user.email
+    : null;
+
+  const { hasUnseenThread, hasUrgentTask } = useNavIndicators(currentUser);
+
   if (session === undefined) return <CenterMsg>Loading…</CenterMsg>;
   if (!session) return <Login />;
-
-  const currentUser = USER_DIRECTORY[session.user.email] || session.user.email;
 
   return (
     <div style={{ minHeight: "100vh", background: STYLES.parchment, fontFamily: "system-ui, -apple-system, sans-serif", color: STYLES.ink }}>
@@ -32,13 +39,19 @@ export default function RaptrApp() {
           <div style={{ fontSize: 20, fontFamily: "Georgia, serif" }}>{currentUser}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" />
-          <SectionButton active={section === "threads"} onClick={() => setSection("threads")} icon={<MessageSquare size={15} />} label="Threads" />
+          <SectionButton active={section === "threads"} onClick={() => setSection("threads")} icon={<MessageSquare size={15} />} label="Threads" showDot={hasUnseenThread} />
+          <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" showDot={hasUrgentTask} />
           <SectionButton active={section === "calendar"} onClick={() => setSection("calendar")} icon={<CalendarDays size={15} />} label="Calendar" />
           <SectionButton active={section === "gym"} onClick={() => setSection("gym")} icon={<Dumbbell size={15} />} label="Gym" />
-          <button onClick={() => supabase.auth.signOut()} style={{ background: "transparent", border: `1px solid ${STYLES.brass}`, color: STYLES.parchment, borderRadius: 4, padding: "8px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-            <LogOut size={14} /> Sign out
-          </button>
+
+          <div style={{ position: "relative" }}>
+            <button onClick={() => setProfileOpen((o) => !o)} aria-label="Profile" style={{ background: "transparent", border: `1px solid ${STYLES.brass}`, color: STYLES.parchment, borderRadius: "50%", width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <User size={16} />
+            </button>
+            {profileOpen && (
+              <ProfileMenu currentUser={currentUser} email={session.user.email} onClose={() => setProfileOpen(false)} />
+            )}
+          </div>
         </div>
       </header>
 

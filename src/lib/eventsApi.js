@@ -12,6 +12,8 @@ function fromRow(r) {
     allDay: r.all_day,
     createdBy: r.created_by,
     createdAt: r.created_at,
+    recurrence: r.recurrence || "none",
+    recurrenceEnd: r.recurrence_end || null,
   };
 }
 
@@ -33,6 +35,8 @@ export async function insertEvent(ev) {
     all_day: ev.allDay,
     created_by: ev.createdBy,
     created_at: ev.createdAt,
+    recurrence: ev.recurrence || "none",
+    recurrence_end: ev.recurrenceEnd || null,
   });
   if (error) throw error;
 }
@@ -46,6 +50,8 @@ export async function updateEvent(id, patch) {
   if ("endDate" in patch) dbPatch.end_date = patch.endDate;
   if ("time" in patch) dbPatch.event_time = patch.time;
   if ("allDay" in patch) dbPatch.all_day = patch.allDay;
+  if ("recurrence" in patch) dbPatch.recurrence = patch.recurrence;
+  if ("recurrenceEnd" in patch) dbPatch.recurrence_end = patch.recurrenceEnd;
   const { error } = await supabase.from("events").update(dbPatch).eq("id", id);
   if (error) throw error;
 }
