@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { fetchTasks, subscribeTasks } from "../lib/tasksApi";
 import { fetchThreads, subscribeThreads } from "../lib/threadsApi";
-import { effectiveUrgency } from "../constants";
+import { effectiveUrgency, todayStr } from "../constants";
 
 // Drives the red nav indicators: unseen threads waiting on you, and
-// urgent (Immediate/High) open tasks assigned to you or shared.
+// critical/overdue open tasks that are yours or shared (never the other
+// person's individually-owned tasks).
 export function useNavIndicators(currentUser) {
   const [hasUnseenThread, setHasUnseenThread] = useState(false);
   const [hasUrgentTask, setHasUrgentTask] = useState(false);
@@ -22,9 +23,13 @@ export function useNavIndicators(currentUser) {
   const recomputeTasks = useCallback(async () => {
     try {
       const tasks = await fetchTasks();
-      const flag = tasks.some(
-        (t) => !t.completed && (t.owner === currentUser || t.owner === "shared") && ["Immediate", "High"].includes(effectiveUrgency(t))
-      );
+      const flag = tasks.some((t) => {
+        if (t.completed) return false;
+        const isMineOrShared = t.owner === currentUser || t.owner === "shared";
+        if (!isMineOrShared) return false;
+        const isOverdue = !!t.dueDate && t.dueDate < todayStr();
+        return effectiveUrgency(t) === "Immediate" || isOverdue;
+      });
       setHasUrgentTask(flag);
     } catch {
       // non-fatal
