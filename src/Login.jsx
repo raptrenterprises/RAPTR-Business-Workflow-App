@@ -21,7 +21,7 @@ export default function Login() {
   return (
     <div style={{ minHeight: "100vh", background: STYLES.ink, color: STYLES.parchment, fontFamily: "Georgia, 'Times New Roman', serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ letterSpacing: 4, fontSize: 12, color: STYLES.brass, marginBottom: 8, textTransform: "uppercase" }}>RAPTR Mysteries</div>
-      <h1 style={{ fontSize: 32, margin: "0 0 24px", fontWeight: 400 }}>Case Log Login</h1>
+      <h1 style={{ fontSize: 32, margin: "0 0 24px", fontWeight: 400 }}>Employee Login</h1>
 
       <form onSubmit={handleSubmit} style={{ background: "#232F3E", border: `1px solid ${STYLES.brass}55`, borderRadius: 6, padding: 28, width: 320, maxWidth: "90vw", display: "flex", flexDirection: "column", gap: 14 }}>
         <label style={{ fontSize: 13, color: STYLES.slate, fontFamily: "system-ui, sans-serif" }}>
