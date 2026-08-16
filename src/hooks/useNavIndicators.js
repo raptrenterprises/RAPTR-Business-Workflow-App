@@ -5,16 +5,17 @@ import { effectiveUrgency, todayStr } from "../constants";
 
 // Drives the red nav indicators: unseen threads waiting on you, and
 // critical/overdue open tasks that are yours or shared (never the other
-// person's individually-owned tasks).
+// person's individually-owned tasks). Tracks counts (not just yes/no) so
+// the count can also drive the OS-level app badge.
 export function useNavIndicators(currentUser) {
-  const [hasUnseenThread, setHasUnseenThread] = useState(false);
-  const [hasUrgentTask, setHasUrgentTask] = useState(false);
+  const [unseenThreadCount, setUnseenThreadCount] = useState(0);
+  const [urgentTaskCount, setUrgentTaskCount] = useState(0);
 
   const recomputeThreads = useCallback(async () => {
     try {
       const threads = await fetchThreads();
-      const flag = threads.some((th) => th.status === "active" && th.turn === currentUser && !th.seenBy.includes(currentUser));
-      setHasUnseenThread(flag);
+      const count = threads.filter((th) => th.status === "active" && th.turn === currentUser && !th.seenBy.includes(currentUser)).length;
+      setUnseenThreadCount(count);
     } catch {
       // non-fatal — indicator just won't show if this fails
     }
@@ -23,14 +24,14 @@ export function useNavIndicators(currentUser) {
   const recomputeTasks = useCallback(async () => {
     try {
       const tasks = await fetchTasks();
-      const flag = tasks.some((t) => {
+      const count = tasks.filter((t) => {
         if (t.completed) return false;
         const isMineOrShared = t.owner === currentUser || t.owner === "shared";
         if (!isMineOrShared) return false;
         const isOverdue = !!t.dueDate && t.dueDate < todayStr();
         return effectiveUrgency(t) === "Immediate" || isOverdue;
-      });
-      setHasUrgentTask(flag);
+      }).length;
+      setUrgentTaskCount(count);
     } catch {
       // non-fatal
     }
@@ -44,5 +45,10 @@ export function useNavIndicators(currentUser) {
     return () => { u1(); u2(); };
   }, [recomputeThreads, recomputeTasks]);
 
-  return { hasUnseenThread, hasUrgentTask };
+  return {
+    hasUnseenThread: unseenThreadCount > 0,
+    hasUrgentTask: urgentTaskCount > 0,
+    unseenThreadCount,
+    urgentTaskCount,
+  };
 }
