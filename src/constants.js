@@ -139,6 +139,11 @@ export function effectiveUrgency(item) {
   return escalateUrgency(item.urgency, item.createdAt);
 }
 
+// Sorts highest-priority first, using the same rank table as everywhere else.
+export function comparePriority(a, b) {
+  return priorityRank(effectiveUrgency(a), a.importance) - priorityRank(effectiveUrgency(b), b.importance);
+}
+
 export function addDays(dateOrStr, n) {
   const d = typeof dateOrStr === "string" ? new Date(dateOrStr.slice(0, 10) + "T00:00:00") : new Date(dateOrStr);
   d.setDate(d.getDate() + n);

@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell } from "lucide-react";
+import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell, LayoutDashboard } from "lucide-react";
 import { STYLES, USERS, USER_DIRECTORY } from "./constants";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./Login";
 import ProfileMenu from "./components/ProfileMenu";
 import { SectionButton, CenterMsg } from "./components/Shared";
 import { useNavIndicators } from "./hooks/useNavIndicators";
+import DashboardSection from "./sections/DashboardSection";
 import TasksSection from "./sections/TasksSection";
 import ThreadsSection from "./sections/ThreadsSection";
 import CalendarSection from "./sections/CalendarSection";
@@ -13,7 +14,7 @@ import GymSection from "./sections/GymSection";
 
 export default function RaptrApp() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = signed out
-  const [section, setSection] = useState("threads");
+  const [section, setSection] = useState("dashboard");
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function RaptrApp() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <SectionButton active={section === "dashboard"} onClick={() => setSection("dashboard")} icon={<LayoutDashboard size={15} />} label="Dashboard" />
           <SectionButton active={section === "threads"} onClick={() => setSection("threads")} icon={<MessageSquare size={15} />} label="Threads" showDot={hasUnseenThread} />
           <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" showDot={hasUrgentTask} />
           <SectionButton active={section === "calendar"} onClick={() => setSection("calendar")} icon={<CalendarDays size={15} />} label="Calendar" />
@@ -56,6 +58,7 @@ export default function RaptrApp() {
         </div>
       </header>
 
+      {section === "dashboard" && <DashboardSection currentUser={currentUser} users={USERS} onNavigate={setSection} />}
       {section === "tasks" && <TasksSection currentUser={currentUser} users={USERS} />}
       {section === "threads" && <ThreadsSection currentUser={currentUser} users={USERS} />}
       {section === "calendar" && <CalendarSection currentUser={currentUser} users={USERS} />}
