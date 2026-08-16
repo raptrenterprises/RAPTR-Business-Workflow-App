@@ -6,6 +6,7 @@ import Login from "./Login";
 import ProfileMenu from "./components/ProfileMenu";
 import { SectionButton, CenterMsg } from "./components/Shared";
 import { useNavIndicators } from "./hooks/useNavIndicators";
+import { setAppBadge, clearAppBadge } from "./lib/appBadge";
 import DashboardSection from "./sections/DashboardSection";
 import TasksSection from "./sections/TasksSection";
 import ThreadsSection from "./sections/ThreadsSection";
@@ -27,7 +28,19 @@ export default function RaptrApp() {
     ? session.user.user_metadata?.display_name || USER_DIRECTORY[session.user.email] || session.user.email
     : null;
 
-  const { hasUnseenThread, hasUrgentTask } = useNavIndicators(currentUser);
+  const { hasUnseenThread, hasUrgentTask, unseenThreadCount, urgentTaskCount } = useNavIndicators(currentUser);
+
+  // App icon badge — reflects the same thing as the red nav dots. Only
+  // updates while the app is open (or recently open in the background);
+  // it can't wake the app up from fully closed without push notifications.
+  useEffect(() => {
+    if (!currentUser) { clearAppBadge(); return; }
+    setAppBadge(unseenThreadCount + urgentTaskCount);
+  }, [currentUser, unseenThreadCount, urgentTaskCount]);
+
+  useEffect(() => {
+    return () => clearAppBadge();
+  }, []);
 
   if (session === undefined) return <CenterMsg>Loading…</CenterMsg>;
   if (!session) return <Login />;
