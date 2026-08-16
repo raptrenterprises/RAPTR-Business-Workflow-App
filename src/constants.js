@@ -211,6 +211,21 @@ function matchesRecurrence(recurrence, startStr, candidateStr) {
   return false;
 }
 
+// True if a (possibly recurring, possibly all-day) event is happening right
+// now — defined as between its start time and 2 hours after that start time.
+// All-day events count as "happening" for their whole covered day.
+export function isEventHappeningNow(ev) {
+  const today = todayStr();
+  if (!eventCoversDay(ev, today)) return false;
+  if (ev.allDay || !ev.time) return true;
+  const [h, m] = ev.time.split(":").map(Number);
+  const start = new Date();
+  start.setHours(h, m, 0, 0);
+  const end = new Date(start.getTime() + 2 * 60 * 60000); // 2 hours
+  const now = new Date();
+  return now >= start && now <= end;
+}
+
 
 export function selectStyle() {
   return { padding: "6px 8px", borderRadius: 4, border: `1px solid ${STYLES.ink}33`, background: "#fff", fontSize: 13 };

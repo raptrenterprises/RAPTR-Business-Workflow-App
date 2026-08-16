@@ -6,6 +6,7 @@ import Login from "./Login";
 import ProfileMenu from "./components/ProfileMenu";
 import { SectionButton, CenterMsg } from "./components/Shared";
 import { useNavIndicators } from "./hooks/useNavIndicators";
+import { useLiveEventIndicator } from "./hooks/useLiveEventIndicator";
 import { setAppBadge, clearAppBadge } from "./lib/appBadge";
 import DashboardSection from "./sections/DashboardSection";
 import TasksSection from "./sections/TasksSection";
@@ -29,14 +30,16 @@ export default function RaptrApp() {
     : null;
 
   const { hasUnseenThread, hasUrgentTask, unseenThreadCount, urgentTaskCount } = useNavIndicators(currentUser);
+  const hasEventNow = useLiveEventIndicator();
 
-  // App icon badge — reflects the same thing as the red nav dots. Only
-  // updates while the app is open (or recently open in the background);
-  // it can't wake the app up from fully closed without push notifications.
+  // App icon badge — reflects the same thing as the red nav dots, plus
+  // whether a calendar event is currently in progress. Only updates while
+  // the app is open (or recently open in the background); it can't wake
+  // the app up from fully closed without push notifications.
   useEffect(() => {
     if (!currentUser) { clearAppBadge(); return; }
-    setAppBadge(unseenThreadCount + urgentTaskCount);
-  }, [currentUser, unseenThreadCount, urgentTaskCount]);
+    setAppBadge(unseenThreadCount + urgentTaskCount + (hasEventNow ? 1 : 0));
+  }, [currentUser, unseenThreadCount, urgentTaskCount, hasEventNow]);
 
   useEffect(() => {
     return () => clearAppBadge();
@@ -66,7 +69,7 @@ export default function RaptrApp() {
           <SectionButton active={section === "dashboard"} onClick={() => setSection("dashboard")} icon={<LayoutDashboard size={15} />} label="Dashboard" />
           <SectionButton active={section === "threads"} onClick={() => setSection("threads")} icon={<MessageSquare size={15} />} label="Threads" showDot={hasUnseenThread} />
           <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" showDot={hasUrgentTask} />
-          <SectionButton active={section === "calendar"} onClick={() => setSection("calendar")} icon={<CalendarDays size={15} />} label="Calendar" />
+          <SectionButton active={section === "calendar"} onClick={() => setSection("calendar")} icon={<CalendarDays size={15} />} label="Calendar" showDot={hasEventNow} />
           <SectionButton active={section === "gym"} onClick={() => setSection("gym")} icon={<Dumbbell size={15} />} label="Gym" />
         </div>
       </header>
