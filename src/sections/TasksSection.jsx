@@ -129,7 +129,7 @@ export default function TasksSection({ currentUser, users }) {
   return (
     <>
       <ErrorBar>{error}</ErrorBar>
-      <div style={{ display: "flex", borderBottom: `1px solid ${STYLES.ink}22`, background: "#EAE3D1", overflowX: "auto" }}>
+      <div style={{ display: "flex", borderBottom: `1px solid ${STYLES.ink}22`, background: STYLES.brass, overflowX: "auto" }}>
         {tabs.map((t) => <TabButton key={t} active={tab === t} onClick={() => setTab(t)} icon={tabIcon(t)} label={tabLabel(t)} />)}
       </div>
 
@@ -173,7 +173,7 @@ export default function TasksSection({ currentUser, users }) {
           </button>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: showFilters ? 8 : 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: showFilters ? 8 : 16 }}>
           <Legend />
           <button onClick={() => setShowFilters((s) => !s)} title="Sort & filter" style={{ ...selectStyle(), display: "flex", alignItems: "center", gap: 5, cursor: "pointer", color: showFilters ? STYLES.ink : STYLES.slate, background: showFilters ? STYLES.brass + "33" : "#fff" }}>
             <SlidersHorizontal size={13} /> Sort & filter
