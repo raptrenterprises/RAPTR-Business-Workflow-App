@@ -33,25 +33,26 @@ export default function RaptrApp() {
 
   return (
     <div style={{ minHeight: "100vh", background: STYLES.parchment, fontFamily: "system-ui, -apple-system, sans-serif", color: STYLES.ink }}>
-      <header style={{ background: STYLES.ink, color: STYLES.parchment, padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 11, letterSpacing: 3, color: STYLES.brass, textTransform: "uppercase", fontFamily: "Georgia, serif" }}>RAPTR Mysteries</div>
-          <div style={{ fontSize: 20, fontFamily: "Georgia, serif" }}>{currentUser}</div>
+      <header style={{ background: STYLES.wax, color: STYLES.parchment, padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: 3, color: STYLES.brass, textTransform: "uppercase", fontFamily: "Georgia, serif" }}>RAPTR Mysteries</div>
+            <div style={{ fontSize: 20, fontFamily: "Georgia, serif" }}>{currentUser}</div>
+          </div>
+          <div style={{ position: "relative" }}>
+            <button onClick={() => setProfileOpen((o) => !o)} aria-label="Profile" style={{ background: "transparent", border: `1px solid ${STYLES.brass}`, color: STYLES.parchment, borderRadius: "50%", width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <User size={16} />
+            </button>
+            {profileOpen && (
+              <ProfileMenu currentUser={currentUser} email={session.user.email} onClose={() => setProfileOpen(false)} align="left" />
+            )}
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <SectionButton active={section === "threads"} onClick={() => setSection("threads")} icon={<MessageSquare size={15} />} label="Threads" showDot={hasUnseenThread} />
           <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" showDot={hasUrgentTask} />
           <SectionButton active={section === "calendar"} onClick={() => setSection("calendar")} icon={<CalendarDays size={15} />} label="Calendar" />
           <SectionButton active={section === "gym"} onClick={() => setSection("gym")} icon={<Dumbbell size={15} />} label="Gym" />
-
-          <div style={{ position: "relative" }}>
-            <button onClick={() => setProfileOpen((o) => !o)} aria-label="Profile" style={{ background: "transparent", border: `1px solid ${STYLES.brass}`, color: STYLES.parchment, borderRadius: "50%", width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <User size={16} />
-            </button>
-            {profileOpen && (
-              <ProfileMenu currentUser={currentUser} email={session.user.email} onClose={() => setProfileOpen(false)} />
-            )}
-          </div>
         </div>
       </header>
 
