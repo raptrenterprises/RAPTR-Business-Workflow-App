@@ -41,6 +41,7 @@ export default function CalendarSection({ currentUser, users }) {
   const [draft, setDraft] = useState(emptyDraft(todayStr()));
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
+  const [selectedEvent, setSelectedEvent] = useState(null);
   const [error, setError] = useState("");
   const [includeShared, setIncludeShared] = useState(false);
   const [includeAll, setIncludeAll] = useState(false);
@@ -220,11 +221,14 @@ export default function CalendarSection({ currentUser, users }) {
             onSaveEdit={saveEditEvent}
             onCancelEdit={() => { setEditingId(null); setEditDraft(null); }}
             onRemoveEvent={removeEvent}
+            onSelectEvent={setSelectedEvent}
           />
         )}
-        {view === "week" && <WeekView refDate={refDate} dayItemsFor={dayItemsFor} weekBucket={weekBucket} onPick={setRefDate} setView={setView} />}
-        {view === "month" && <MonthView refDate={refDate} dayItemsFor={dayItemsFor} monthBucket={monthBucket} onPick={setRefDate} setView={setView} />}
+        {view === "week" && <WeekView refDate={refDate} dayItemsFor={dayItemsFor} weekBucket={weekBucket} onPick={setRefDate} setView={setView} onSelectEvent={setSelectedEvent} />}
+        {view === "month" && <MonthView refDate={refDate} dayItemsFor={dayItemsFor} monthBucket={monthBucket} onPick={setRefDate} setView={setView} onSelectEvent={setSelectedEvent} />}
       </main>
+
+      <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onEdit={(ev) => { startEditEvent(ev); setView("day"); setRefDate(ev.date); }} />
     </>
   );
 }
@@ -317,7 +321,62 @@ function BucketPanel({ title, items }) {
   );
 }
 
-function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStartEdit, onSaveEdit, onCancelEdit, onRemoveEvent }) {
+function linkify(text) {
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part) || /^www\./.test(part)) {
+      const href = part.startsWith("http") ? part : `https://${part}`;
+      return (
+        <a key={i} href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: STYLES.wax, wordBreak: "break-all" }}>
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+function EventDetailModal({ event, onClose, onEdit }) {
+  if (!event) return null;
+  const color = EVENT_CATEGORY_COLOR[event.category] || STYLES.brass;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 12px 40px rgba(0,0,0,0.35)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 14 }}>
+          <div>
+            <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: 0.5 }}>{event.category}</span>
+            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 22, margin: "4px 0 0", color: STYLES.ink }}>{event.title}</h2>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><X size={20} /></button>
+        </div>
+
+        <div style={{ fontSize: 13, color: STYLES.slate, marginBottom: 18, display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <CalendarDays size={13} /> {event.date}{event.endDate && event.endDate !== event.date ? ` → ${event.endDate}` : ""}
+          </span>
+          {!event.allDay && event.time && <span>{event.time}</span>}
+          {event.recurrence && event.recurrence !== "none" && (
+            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Repeat size={13} /> {event.recurrence}{event.recurrenceEnd ? ` until ${event.recurrenceEnd}` : ""}</span>
+          )}
+        </div>
+
+        {event.description ? (
+          <div style={{ fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap", color: STYLES.ink, userSelect: "text", marginBottom: 18 }}>
+            {linkify(event.description)}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: STYLES.slate, fontStyle: "italic", marginBottom: 18 }}>No description.</div>
+        )}
+
+        <button onClick={() => { onEdit(event); onClose(); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}55`, color: STYLES.slate, borderRadius: 4, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+          <Pencil size={12} /> Edit
+        </button>
+      </div>
+    </div>
+  );
+}
+function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStartEdit, onSaveEdit, onCancelEdit, onRemoveEvent, onSelectEvent }) {
   const { events, tasks } = dayItemsFor(date);
   return (
     <div style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 18 }}>
@@ -332,12 +391,12 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
             ) : (
               <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}14`, borderLeft: `4px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, border: `1px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}55`, borderLeftWidth: 4, borderRadius: 4, padding: "8px 10px" }}>
                 <CalendarDays size={14} color={EVENT_CATEGORY_COLOR[e.category] || STYLES.brass} />
-                <div style={{ flex: 1 }}>
+                <div onClick={() => onSelectEvent(e)} style={{ flex: 1, cursor: "pointer" }}>
                   <div>
                     {e.title} {e.endDate && e.endDate !== e.date && <span style={{ fontSize: 11, color: STYLES.slate }}>({e.date} → {e.endDate})</span>}
                     {e.recurrence && e.recurrence !== "none" && <Repeat size={11} color={STYLES.slate} style={{ marginLeft: 6, verticalAlign: "middle" }} />}
                   </div>
-                  {e.description && <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 2 }}>{e.description}</div>}
+                  {e.description && <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description}</div>}
                 </div>
                 {!e.allDay && e.time && <span style={{ fontSize: 12, color: STYLES.slate }}>{e.time}</span>}
                 <span style={{ fontSize: 10, color: EVENT_CATEGORY_COLOR[e.category] || STYLES.slate, fontWeight: 700 }}>{e.category}</span>
@@ -353,7 +412,7 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
   );
 }
 
-function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView }) {
+function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView, onSelectEvent }) {
   const start = startOfWeek(refDate);
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return toStr(d); });
   return (
@@ -368,7 +427,7 @@ function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView }) {
               <div style={{ fontSize: 11, color: STYLES.slate }}>{WEEKDAYS[new Date(d + "T00:00:00").getDay()]}</div>
               <div style={{ fontSize: 15, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink, marginBottom: 4 }}>{Number(d.slice(8, 10))}</div>
               {events.map((e) => (
-                <div key={e.id} style={{ fontSize: 11, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `3px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "2px 5px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</div>
+                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 11, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `3px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "2px 5px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{e.title}</div>
               ))}
               <TasksBox items={tasks} label="Tasks" />
             </div>
@@ -381,7 +440,7 @@ function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView }) {
   );
 }
 
-function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView }) {
+function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView, onSelectEvent }) {
   const monthStart = startOfMonth(refDate);
   const monthEnd = endOfMonth(refDate);
   const gridStart = startOfWeek(toStr(monthStart));
@@ -395,17 +454,17 @@ function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView }) {
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: STYLES.ink + "22", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, overflow: "hidden" }}>
         {WEEKDAYS.map((w) => (
-          <div key={w} style={{ background: "#EAE3D1", textAlign: "center", fontSize: 11, fontWeight: 700, padding: "6px 0", color: STYLES.slate }}>{w}</div>
+          <div key={w} style={{ background: STYLES.brass + "33", textAlign: "center", fontSize: 11, fontWeight: 700, padding: "6px 0", color: STYLES.ink }}>{w}</div>
         ))}
         {days.map((d) => {
           const { events, tasks } = dayItemsFor(d);
           const isToday = d === todayStr();
           const inMonth = thisMonth(d);
           return (
-            <div key={d} onClick={() => { onPick(d); setView("day"); }} style={{ background: inMonth ? "#fff" : "#F7F3E9", minHeight: 88, padding: 6, cursor: "pointer", opacity: inMonth ? 1 : 0.5 }}>
+            <div key={d} onClick={() => { onPick(d); setView("day"); }} style={{ background: inMonth ? "#fff" : STYLES.gray, minHeight: 88, padding: 6, cursor: "pointer", opacity: inMonth ? 1 : 0.6 }}>
               <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink, marginBottom: 3 }}>{Number(d.slice(8, 10))}</div>
               {events.slice(0, 2).map((e) => (
-                <div key={e.id} style={{ fontSize: 10, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `2px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "1px 4px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</div>
+                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 10, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `2px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "1px 4px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{e.title}</div>
               ))}
               {tasks.length > 0 && (
                 <div style={{ fontSize: 10, color: urgencyColor(effectiveUrgency(tasks[0])), fontWeight: 700 }}>● {tasks.length} task{tasks.length > 1 ? "s" : ""}</div>
