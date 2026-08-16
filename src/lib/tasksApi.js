@@ -60,7 +60,7 @@ export async function deleteTaskRow(id) {
 
 export function subscribeTasks(onChange) {
   const channel = supabase
-    .channel("tasks-changes")
+    .channel(`tasks-changes-${Math.random().toString(36).slice(2)}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, onChange)
     .subscribe();
   return () => supabase.removeChannel(channel);

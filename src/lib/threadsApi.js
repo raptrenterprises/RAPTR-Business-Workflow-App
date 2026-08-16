@@ -64,6 +64,6 @@ export async function deleteThreadRow(id) {
 }
 
 export function subscribeThreads(onChange) {
-  const channel = supabase.channel("threads-changes").on("postgres_changes", { event: "*", schema: "public", table: "threads" }, onChange).subscribe();
+  const channel = supabase.channel(`threads-changes-${Math.random().toString(36).slice(2)}`).on("postgres_changes", { event: "*", schema: "public", table: "threads" }, onChange).subscribe();
   return () => supabase.removeChannel(channel);
 }

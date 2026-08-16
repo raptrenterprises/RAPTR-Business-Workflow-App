@@ -63,7 +63,7 @@ export async function deleteEventRow(id) {
 
 export function subscribeEvents(onChange) {
   const channel = supabase
-    .channel("events-changes")
+    .channel(`events-changes-${Math.random().toString(36).slice(2)}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "events" }, onChange)
     .subscribe();
   return () => supabase.removeChannel(channel);
