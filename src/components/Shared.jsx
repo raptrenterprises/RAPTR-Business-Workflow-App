@@ -5,11 +5,11 @@ import {
   importanceColor, urgencyColor, selectStyle,
 } from "../constants";
 
-export function SectionButton({ active, onClick, icon, label, showDot }) {
+export function SectionButton({ active, onClick, icon, label, showDot, dotColor }) {
   return (
     <button onClick={onClick} style={{ position: "relative", background: active ? STYLES.brass : "transparent", border: `1px solid ${STYLES.brass}`, color: active ? STYLES.ink : STYLES.parchment, fontWeight: active ? 700 : 400, borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
       {icon} {label}
-      {showDot && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: STYLES.wax, border: "1.5px solid " + STYLES.ink }} />}
+      {showDot && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: dotColor || STYLES.wax, border: "1.5px solid " + STYLES.ink }} />}
     </button>
   );
 }
