@@ -73,12 +73,12 @@ export function Badge({ label, color }) {
 export function Legend() {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ marginBottom: 16 }}>
-      <button onClick={() => setOpen(!open)} style={{ background: "transparent", border: `1px solid ${STYLES.slate}55`, color: STYLES.slate, borderRadius: 4, padding: "5px 10px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-        <Info size={12} /> {open ? "Hide legend" : "Urgency / Importance legend"}
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen(!open)} style={{ ...selectStyle(), color: STYLES.slate, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+        <Info size={13} /> {open ? "Hide legend" : "Urgency / Importance legend"}
       </button>
       {open && (
-        <div style={{ marginTop: 8, background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 14, display: "flex", flexWrap: "wrap", gap: 24, fontSize: 12.5 }}>
+        <div style={{ marginTop: 8, background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 14, display: "flex", flexWrap: "wrap", gap: 24, fontSize: 12.5, position: "absolute", zIndex: 20, width: "max-content", maxWidth: "80vw" }}>
           <div>
             <div style={{ fontWeight: 700, marginBottom: 6, color: STYLES.ink }}>Urgency</div>
             {URGENCY_LEVELS.slice().reverse().map((l) => (

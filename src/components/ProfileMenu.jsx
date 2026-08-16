@@ -3,7 +3,7 @@ import { X, Save, LogOut } from "lucide-react";
 import { STYLES, selectStyle } from "../constants";
 import { supabase } from "../lib/supabaseClient";
 
-export default function ProfileMenu({ currentUser, email, onClose }) {
+export default function ProfileMenu({ currentUser, email, onClose, align = "right" }) {
   const [displayName, setDisplayName] = useState(currentUser);
   const [newEmail, setNewEmail] = useState(email);
   const [newPassword, setNewPassword] = useState("");
@@ -48,7 +48,7 @@ export default function ProfileMenu({ currentUser, email, onClose }) {
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 40, background: "transparent" }} />
-      <div style={{ position: "absolute", top: "110%", right: 0, zIndex: 50, background: "#fff", color: STYLES.ink, border: `1px solid ${STYLES.ink}22`, borderRadius: 8, padding: 16, width: 280, boxShadow: "0 8px 24px rgba(0,0,0,0.25)" }}>
+      <div style={{ position: "absolute", top: "110%", [align]: 0, zIndex: 50, background: "#fff", color: STYLES.ink, border: `1px solid ${STYLES.ink}22`, borderRadius: 8, padding: 16, width: 280, boxShadow: "0 8px 24px rgba(0,0,0,0.25)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <strong style={{ fontFamily: "Georgia, serif" }}>Your profile</strong>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate }}><X size={16} /></button>
