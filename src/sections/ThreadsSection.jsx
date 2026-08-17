@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Plus, Trash2, X, Eye, ChevronDown, ChevronUp, CheckCircle2, RotateCcw, Send, CalendarDays, SlidersHorizontal } from "lucide-react";
-import { STYLES, IMPORTANCE_WEIGHT, URGENCY_WEIGHT, uid, importanceColor, urgencyColor, selectStyle, priorityRank, effectiveUrgency } from "../constants";
+import { STYLES, IMPORTANCE_WEIGHT, URGENCY_WEIGHT, uid, importanceColor, urgencyColor, selectStyle, priorityRank, effectiveUrgency, TIME_ZONE } from "../constants";
 import { ImportanceSelect, UrgencyOrDueDateField, Badge, Legend, SortFilterBar, CenterMsg, EmptyMsg, ErrorBar } from "../components/Shared";
 import { fetchThreads, insertThread, updateThread, deleteThreadRow, subscribeThreads } from "../lib/threadsApi";
 
@@ -296,7 +296,7 @@ function ThreadCard({
             {th.messages.map((m) => (
               <div key={m.id} style={{ alignSelf: m.from === currentUser ? "flex-end" : "flex-start", maxWidth: "80%" }}>
                 <div style={{ fontSize: 11, color: STYLES.slate, marginBottom: 2, textAlign: m.from === currentUser ? "right" : "left" }}>
-                  {m.from} · {new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {m.from} · {new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: TIME_ZONE })}
                 </div>
                 <div style={{ background: m.from === currentUser ? STYLES.brass + "22" : STYLES.ink + "0d", border: `1px solid ${STYLES.ink}14`, borderRadius: 8, padding: "8px 12px", fontSize: 14 }}>{m.body}</div>
               </div>
@@ -312,7 +312,7 @@ function ThreadCard({
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 12, color: STYLES.slate }}>Closed {th.completedAt ? new Date(th.completedAt).toLocaleDateString() : ""} — archived.</span>
+              <span style={{ fontSize: 12, color: STYLES.slate }}>Closed {th.completedAt ? new Date(th.completedAt).toLocaleDateString(undefined, { timeZone: TIME_ZONE }) : ""} — archived.</span>
               <button onClick={() => onReopen(th.id)} style={{ background: "transparent", border: `1px solid ${STYLES.brass}`, color: STYLES.brass, borderRadius: 4, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}><RotateCcw size={12} /> Reopen</button>
               <button onClick={() => onDelete(th.id)} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><Trash2 size={15} /></button>
             </div>

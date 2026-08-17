@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Save, X, CalendarDays,
 import {
   STYLES, uid, todayStr, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, toStr,
   importanceColor, urgencyColor, selectStyle, EVENT_CATEGORIES, EVENT_CATEGORY_COLOR, effectiveUrgency,
-  eventCoversDay, EVENT_RECURRENCE_OPTIONS,
+  eventCoversDay, EVENT_RECURRENCE_OPTIONS, TIME_ZONE, formatClockTime,
 } from "../constants";
 import { Badge, CenterMsg, ErrorBar } from "../components/Shared";
 import { fetchEvents, insertEvent, updateEvent, deleteEventRow, subscribeEvents } from "../lib/eventsApi";
@@ -26,6 +26,11 @@ function triggerDateFor(item) {
   const urg = effectiveUrgency(item);
   if (urg === "Immediate" || urg === "High") return todayStr();
   return null;
+}
+
+function eventLabel(e) {
+  if (e.allDay || !e.time) return e.title;
+  return `${formatClockTime(e.time)} ${e.title}`;
 }
 
 const emptyDraft = (date) => ({ title: "", description: "", category: "Other", date, endDate: date, time: "", allDay: true, recurrence: "none", recurrenceEnd: "" });
@@ -150,12 +155,12 @@ export default function CalendarSection({ currentUser, users }) {
 
   const headerLabel = () => {
     const d = new Date(refDate + "T00:00:00");
-    if (view === "day") return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    if (view === "day") return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: TIME_ZONE });
     if (view === "week") {
       const s = startOfWeek(refDate), e = endOfWeek(refDate);
-      return `${s.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${e.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+      return `${s.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: TIME_ZONE })} – ${e.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: TIME_ZONE })}`;
     }
-    return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    return d.toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: TIME_ZONE });
   };
 
   return (
@@ -393,7 +398,7 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
                 <CalendarDays size={14} color={EVENT_CATEGORY_COLOR[e.category] || STYLES.brass} />
                 <div onClick={() => onSelectEvent(e)} style={{ flex: 1, cursor: "pointer" }}>
                   <div>
-                    {e.title} {e.endDate && e.endDate !== e.date && <span style={{ fontSize: 11, color: STYLES.slate }}>({e.date} → {e.endDate})</span>}
+                    {eventLabel(e)} {e.endDate && e.endDate !== e.date && <span style={{ fontSize: 11, color: STYLES.slate }}>({e.date} → {e.endDate})</span>}
                     {e.recurrence && e.recurrence !== "none" && <Repeat size={11} color={STYLES.slate} style={{ marginLeft: 6, verticalAlign: "middle" }} />}
                   </div>
                   {e.description && <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description}</div>}
@@ -427,7 +432,7 @@ function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView, onSelectE
               <div style={{ fontSize: 11, color: STYLES.slate }}>{WEEKDAYS[new Date(d + "T00:00:00").getDay()]}</div>
               <div style={{ fontSize: 15, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink, marginBottom: 4 }}>{Number(d.slice(8, 10))}</div>
               {events.map((e) => (
-                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 11, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `3px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "2px 5px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{e.title}</div>
+                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 11, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `3px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "2px 5px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{eventLabel(e)}</div>
               ))}
               <TasksBox items={tasks} label="Tasks" />
             </div>
@@ -464,7 +469,7 @@ function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView, onSelec
             <div key={d} onClick={() => { onPick(d); setView("day"); }} style={{ background: inMonth ? "#fff" : STYLES.gray, minHeight: 88, padding: 6, cursor: "pointer", opacity: inMonth ? 1 : 0.6 }}>
               <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink, marginBottom: 3 }}>{Number(d.slice(8, 10))}</div>
               {events.slice(0, 2).map((e) => (
-                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 10, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `2px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "1px 4px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{e.title}</div>
+                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 10, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `2px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "1px 4px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{eventLabel(e)}</div>
               ))}
               {tasks.length > 0 && (
                 <div style={{ fontSize: 10, color: urgencyColor(effectiveUrgency(tasks[0])), fontWeight: 700 }}>● {tasks.length} task{tasks.length > 1 ? "s" : ""}</div>
