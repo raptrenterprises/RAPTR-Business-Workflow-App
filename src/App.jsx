@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell, LayoutDashboard } from "lucide-react";
 import { STYLES, USERS, USER_DIRECTORY } from "./constants";
 import { supabase } from "./lib/supabaseClient";
@@ -12,7 +12,7 @@ import DashboardSection from "./sections/DashboardSection";
 import TasksSection from "./sections/TasksSection";
 import ThreadsSection from "./sections/ThreadsSection";
 import CalendarSection from "./sections/CalendarSection";
-import GymSection from "./sections/GymSection";
+const GymSection = lazy(() => import("./sections/GymSection"));
 
 export default function RaptrApp() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = signed out
@@ -52,10 +52,6 @@ export default function RaptrApp() {
     <div style={{ minHeight: "100vh", background: STYLES.parchment, fontFamily: "system-ui, -apple-system, sans-serif", color: STYLES.ink }}>
       <header style={{ background: STYLES.wax, color: STYLES.parchment, padding: "18px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 11, letterSpacing: 3, color: STYLES.brass, textTransform: "uppercase", fontFamily: "Georgia, serif" }}>RAPTR Mysteries</div>
-            <div style={{ fontSize: 20, fontFamily: "Georgia, serif" }}>{currentUser}</div>
-          </div>
           <div style={{ position: "relative" }}>
             <button onClick={() => setProfileOpen((o) => !o)} aria-label="Profile" style={{ background: "transparent", border: `1px solid ${STYLES.brass}`, color: STYLES.parchment, borderRadius: "50%", width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <User size={16} />
@@ -63,6 +59,10 @@ export default function RaptrApp() {
             {profileOpen && (
               <ProfileMenu currentUser={currentUser} email={session.user.email} onClose={() => setProfileOpen(false)} align="left" />
             )}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: 3, color: STYLES.brass, textTransform: "uppercase", fontFamily: "Georgia, serif" }}>RAPTR Mysteries</div>
+            <div style={{ fontSize: 20, fontFamily: "Georgia, serif" }}>{currentUser}</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -78,7 +78,11 @@ export default function RaptrApp() {
       {section === "tasks" && <TasksSection currentUser={currentUser} users={USERS} />}
       {section === "threads" && <ThreadsSection currentUser={currentUser} users={USERS} />}
       {section === "calendar" && <CalendarSection currentUser={currentUser} users={USERS} />}
-      {section === "gym" && <GymSection currentUser={currentUser} users={USERS} />}
+      {section === "gym" && (
+        <Suspense fallback={<CenterMsg>Loading RAPTR Gym…</CenterMsg>}>
+          <GymSection currentUser={currentUser} users={USERS} />
+        </Suspense>
+      )}
     </div>
   );
 }

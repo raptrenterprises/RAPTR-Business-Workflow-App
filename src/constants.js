@@ -77,6 +77,8 @@ export const RECURRENCE_OPTIONS = [
   { value: "monthly", label: "Monthly" },
 ];
 
+export const WORKOUT_TYPES = ["Weights", "Barre", "Rowing", "Swimming", "Other Cardio", "Other Strength", "Other Flexibility", "Other"];
+
 export function uid() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   // Fallback for older browsers without crypto.randomUUID
@@ -86,14 +88,47 @@ export function uid() {
     return v.toString(16);
   });
 }
+export const TIME_ZONE = "America/New_York";
+
+// "Today" and "now", anchored to Eastern time regardless of the device's
+// own timezone — matters for two people who might not always be in the
+// same place, and for consistent urgency/overdue calculations.
 export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(new Date());
+}
+export function nowPartsET() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date());
+  const map = {};
+  parts.forEach((p) => { map[p.type] = p.value; });
+  return { hour: Number(map.hour) % 24, minute: Number(map.minute) };
+}
+// Converts a value to its Eastern-time calendar date string. Plain
+// 'YYYY-MM-DD' strings (due dates, event dates) are already timezone-free
+// wall-clock dates and pass through unchanged; full timestamps (createdAt,
+// message .at fields) get converted from their UTC instant to the Eastern
+// calendar day that instant falls on.
+export function toEasternDateStr(input) {
+  if (typeof input === "string" && input.length === 10) return input;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(new Date(input));
+}
+// Formats a value for display, always in Eastern time regardless of device timezone.
+export function formatET(input, options) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, ...options }).format(new Date(input));
+}
+// Formats a stored 24-hour "HH:MM" time string as "h:mm AM/PM" (Eastern is
+// implicit — these are wall-clock times someone typed in, not UTC instants).
+export function formatClockTime(timeStr) {
+  if (!timeStr) return "";
+  const [h, m] = timeStr.split(":").map(Number);
+  const d = new Date(2000, 0, 1, h, m);
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(d);
 }
 
-// Whole days from `fromStr` to `toStr` (both 'YYYY-MM-DD'-ish strings; positive = toStr is later).
+// Whole days from `fromStr` to `toStr` (both 'YYYY-MM-DD'-ish strings, or
+// full timestamps — either is normalized to its Eastern calendar date first).
 export function daysBetween(fromStr, toStr) {
-  const from = new Date((fromStr || "").slice(0, 10) + "T00:00:00");
-  const to = new Date((toStr || "").slice(0, 10) + "T00:00:00");
+  const from = new Date(toEasternDateStr(fromStr) + "T00:00:00");
+  const to = new Date(toEasternDateStr(toStr) + "T00:00:00");
   return Math.round((to - from) / 86400000);
 }
 
@@ -145,9 +180,10 @@ export function comparePriority(a, b) {
 }
 
 export function addDays(dateOrStr, n) {
-  const d = typeof dateOrStr === "string" ? new Date(dateOrStr.slice(0, 10) + "T00:00:00") : new Date(dateOrStr);
+  const base = typeof dateOrStr === "string" ? toEasternDateStr(dateOrStr) : new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(new Date(dateOrStr));
+  const d = new Date(base + "T00:00:00");
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA").format(d);
 }
 export function advanceDate(dateStr, recurrence) {
   const d = dateStr ? new Date(dateStr + "T00:00:00") : new Date();
@@ -219,11 +255,11 @@ export function isEventHappeningNow(ev) {
   if (!eventCoversDay(ev, today)) return false;
   if (ev.allDay || !ev.time) return true;
   const [h, m] = ev.time.split(":").map(Number);
-  const start = new Date();
-  start.setHours(h, m, 0, 0);
-  const end = new Date(start.getTime() + 2 * 60 * 60000); // 2 hours
-  const now = new Date();
-  return now >= start && now <= end;
+  const startMinutes = h * 60 + m;
+  const endMinutes = startMinutes + 2 * 60; // 2 hours
+  const { hour, minute } = nowPartsET();
+  const nowMinutes = hour * 60 + minute;
+  return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
 }
 
 
