@@ -9,11 +9,7 @@ import { fetchChallenges, updateChallenge, subscribeChallenges } from "../lib/gy
 import { eventCoversDay } from "../constants";
 
 const MS_DAY = 86400000;
-function weekIndexForDate(startDate, dateStr) {
-  const start = new Date(startDate + "T00:00:00");
-  const d = new Date(dateStr + "T00:00:00");
-  return Math.floor((d - start) / (7 * MS_DAY));
-}
+
 
 export default function DashboardSection({ currentUser, users, onNavigate }) {
   const [events, setEvents] = useState([]);
@@ -171,25 +167,26 @@ function GymCard({ challenge, currentUser, onNavigate, onReload }) {
     );
   }
 
-  const p = challenge.participants[currentUser] || { weighIns: [], workoutDates: [] };
+  const raw = challenge.participants[currentUser] || {};
+  const weighIns = raw.weighIns || [];
+  const workouts = raw.workouts || (raw.workoutDates || []).map((d) => ({ date: d, type: "Other" })); // fall back for any not-yet-migrated data
   const today = todayStr();
-  const currentWeek = weekIndexForDate(challenge.startDate, today);
-  const currentWeighIn = p.weighIns.find((w) => w.week === currentWeek);
-  const workedOutToday = p.workoutDates.includes(today);
+  const todaysWeighIn = weighIns.find((w) => w.date === today);
+  const workedOutToday = workouts.some((w) => w.date === today);
 
   async function logWeight() {
     if (weighInput === "") return;
-    const others = p.weighIns.filter((w) => w.week !== currentWeek);
-    const weighIns = [...others, { week: currentWeek, weight: Number(weighInput), at: new Date().toISOString() }].sort((a, b) => a.week - b.week);
-    const nextParticipants = { ...challenge.participants, [currentUser]: { ...p, weighIns } };
+    const others = weighIns.filter((w) => w.date !== today);
+    const nextWeighIns = [...others, { date: today, weight: Number(weighInput), at: new Date().toISOString() }].sort((a, b) => a.date.localeCompare(b.date));
+    const nextParticipants = { ...challenge.participants, [currentUser]: { ...raw, weighIns: nextWeighIns } };
     await updateChallenge(challenge.id, { participants: nextParticipants });
     setWeighInput("");
     onReload();
   }
 
   async function toggleToday() {
-    const workoutDates = workedOutToday ? p.workoutDates.filter((d) => d !== today) : [...p.workoutDates, today];
-    const nextParticipants = { ...challenge.participants, [currentUser]: { ...p, workoutDates } };
+    const nextWorkouts = workedOutToday ? workouts.filter((w) => w.date !== today) : [...workouts, { date: today, type: "Other" }];
+    const nextParticipants = { ...challenge.participants, [currentUser]: { ...raw, workouts: nextWorkouts } };
     await updateChallenge(challenge.id, { participants: nextParticipants });
     onReload();
   }
@@ -198,7 +195,7 @@ function GymCard({ challenge, currentUser, onNavigate, onReload }) {
     <CardShell icon={<Dumbbell size={18} color={STYLES.wax} />} title="RAPTR Gym" onNavigate={onNavigate} section="gym">
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input type="number" placeholder={currentWeighIn ? String(currentWeighIn.weight) : "Log this week's weight"} value={weighInput} onChange={(e) => setWeighInput(e.target.value)} style={{ ...selectStyle(), width: 170 }} />
+          <input type="number" placeholder={todaysWeighIn ? String(todaysWeighIn.weight) : "Log today's weight"} value={weighInput} onChange={(e) => setWeighInput(e.target.value)} style={{ ...selectStyle(), width: 170 }} />
           <button onClick={logWeight} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}>Log</button>
         </div>
         <button onClick={toggleToday} style={{ display: "flex", alignItems: "center", gap: 6, background: workedOutToday ? STYLES.green : "#fff", color: workedOutToday ? "#fff" : STYLES.slate, border: `1px solid ${workedOutToday ? STYLES.green : STYLES.ink + "33"}`, borderRadius: 4, padding: "7px 12px", cursor: "pointer", fontSize: 13 }}>
