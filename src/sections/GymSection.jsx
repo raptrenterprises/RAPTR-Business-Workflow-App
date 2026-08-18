@@ -1,51 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { Plus, Pencil, Save, X, Dumbbell, Trash2 } from "lucide-react";
 import { STYLES, uid, todayStr, daysBetween, addDays, selectStyle, TIME_ZONE, WORKOUT_TYPES } from "../constants";
 import { CenterMsg, EmptyMsg, ErrorBar } from "../components/Shared";
 import { fetchChallenges, insertChallenge, updateChallenge, deleteChallengeRow, subscribeChallenges } from "../lib/gymApi";
+import { normalizeParticipant, weekIndexForDate, totalWeeks, targetForDate, weightStatus, STATUS_COLOR, PARTICIPANT_COLOR } from "../lib/gymHelpers";
 
-function emptyParticipant() {
-  return { startingWeight: null, targetWeight: null, weighIns: [], workouts: [] };
-}
-
-// Reads a participant's data with backward-compatible fallbacks for the
-// older data shapes (weekly weigh-ins keyed by week number, and plain
-// boolean workoutDates instead of typed workouts).
-function normalizeParticipant(raw, challenge) {
-  const p = raw || {};
-  let weighIns = p.weighIns || [];
-  weighIns = weighIns.map((w) => (w.date ? w : { date: addDays(challenge.startDate, (w.week || 0) * 7), weight: w.weight, at: w.at }));
-  let workouts = p.workouts;
-  if (!workouts) workouts = (p.workoutDates || []).map((d) => ({ date: d, type: "Other" }));
-  return { startingWeight: p.startingWeight ?? null, targetWeight: p.targetWeight ?? null, weighIns, workouts };
-}
-
-function weekIndexForDate(startDate, dateStr) {
-  return Math.floor(daysBetween(startDate, dateStr) / 7);
-}
-function totalWeeks(startDate, endDate) {
-  return Math.max(1, Math.ceil(daysBetween(startDate, endDate) / 7));
-}
-function targetForDate(p, challenge, dateStr) {
-  if (p.startingWeight == null || p.targetWeight == null) return null;
-  const totalDays = Math.max(1, daysBetween(challenge.startDate, challenge.endDate));
-  const elapsed = Math.min(totalDays, Math.max(0, daysBetween(challenge.startDate, dateStr)));
-  const frac = elapsed / totalDays;
-  return p.startingWeight + (p.targetWeight - p.startingWeight) * frac;
-}
-function weightStatus(target, actual, startingWeight) {
-  if (target == null || actual == null) return "none";
-  const losing = startingWeight != null && target < startingWeight;
-  const gaining = startingWeight != null && target > startingWeight;
-  const diff = actual - target;
-  const tol = 1;
-  if (losing) { if (diff <= tol) return "good"; if (diff <= tol * 3) return "warn"; return "bad"; }
-  if (gaining) { if (diff >= -tol) return "good"; if (diff >= -tol * 3) return "warn"; return "bad"; }
-  return Math.abs(diff) <= tol ? "good" : "warn";
-}
-const STATUS_COLOR = { good: STYLES.green, warn: STYLES.brass, bad: STYLES.wax, none: STYLES.gray };
-const PARTICIPANT_COLOR = { Cathy: STYLES.purple, Evan: STYLES.blue };
+const WeightChart = lazy(() => import("../components/WeightChart"));
 
 export default function GymSection({ currentUser, users }) {
   const [challenges, setChallenges] = useState([]);
@@ -223,7 +183,9 @@ export default function GymSection({ currentUser, users }) {
                   ))}
                 </div>
 
-                <WeightChart challenge={c} users={users} />
+                <Suspense fallback={<div style={{ fontSize: 12, color: STYLES.slate, marginTop: 14 }}>Loading chart…</div>}>
+                  <WeightChart challenge={c} users={users} />
+                </Suspense>
               </div>
             );
           })
@@ -305,49 +267,3 @@ function ParticipantPanel({ challenge, user, currentWeek, onLogWeighIn, onSetWor
   );
 }
 
-function WeightChart({ challenge, users }) {
-  const dateSet = new Set([challenge.startDate, challenge.endDate]);
-  const participants = {};
-  users.forEach((u) => {
-    const p = normalizeParticipant(challenge.participants[u], challenge);
-    participants[u] = p;
-    p.weighIns.forEach((w) => dateSet.add(w.date));
-  });
-  const dates = Array.from(dateSet).sort();
-  const data = dates.map((date) => {
-    const point = { date };
-    users.forEach((u) => {
-      const p = participants[u];
-      const w = p.weighIns.find((w) => w.date === date);
-      if (w) point[`${u}_actual`] = w.weight;
-      const t = targetForDate(p, challenge, date);
-      if (t != null) point[`${u}_target`] = Math.round(t * 10) / 10;
-    });
-    return point;
-  });
-
-  const hasAnyTargets = users.some((u) => participants[u].startingWeight != null && participants[u].targetWeight != null);
-  if (!hasAnyTargets) return null;
-
-  return (
-    <div style={{ marginTop: 18 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: STYLES.ink, fontFamily: "Georgia, serif" }}>Weight vs Target</div>
-      <ResponsiveContainer width="100%" height={260}>
-        <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={STYLES.ink + "22"} />
-          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
-          <Tooltip />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          {users.flatMap((u) => {
-            const color = PARTICIPANT_COLOR[u] || STYLES.brass;
-            return [
-              <Line key={`${u}-actual`} type="monotone" dataKey={`${u}_actual`} name={`${u} actual`} stroke={color} strokeWidth={2} dot={{ r: 3 }} connectNulls />,
-              <Line key={`${u}-target`} type="monotone" dataKey={`${u}_target`} name={`${u} target`} stroke={color} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls />,
-            ];
-          })}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}

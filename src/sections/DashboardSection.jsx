@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { CalendarDays, MessageSquare, ClipboardList, Dumbbell, ChevronRight, Check } from "lucide-react";
-import { STYLES, todayStr, effectiveUrgency, comparePriority, importanceColor, urgencyColor, selectStyle } from "../constants";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { CalendarDays, MessageSquare, ClipboardList, Dumbbell, ChevronRight } from "lucide-react";
+import { STYLES, todayStr, effectiveUrgency, comparePriority, importanceColor, urgencyColor, selectStyle, WORKOUT_TYPES } from "../constants";
 import { Badge } from "../components/Shared";
 import { fetchEvents, subscribeEvents } from "../lib/eventsApi";
 import { fetchTasks, subscribeTasks } from "../lib/tasksApi";
 import { fetchThreads, subscribeThreads } from "../lib/threadsApi";
 import { fetchChallenges, updateChallenge, subscribeChallenges } from "../lib/gymApi";
 import { eventCoversDay } from "../constants";
+import { normalizeParticipant, targetForDate, weightStatus, STATUS_COLOR } from "../lib/gymHelpers";
+
+const WeightChart = lazy(() => import("../components/WeightChart"));
 
 const MS_DAY = 86400000;
 
@@ -64,7 +67,7 @@ export default function DashboardSection({ currentUser, users, onNavigate }) {
       <CalendarCard events={todaysEvents} onNavigate={onNavigate} />
       <ThreadsCard threads={threadItems} currentUser={currentUser} users={users} onNavigate={onNavigate} />
       <TasksCard tasks={taskItems} onNavigate={onNavigate} />
-      <GymCard challenge={activeChallenge} currentUser={currentUser} onNavigate={onNavigate} onReload={reloadChallenges} />
+      <GymCard challenge={activeChallenge} currentUser={currentUser} users={users} onNavigate={onNavigate} onReload={reloadChallenges} />
     </main>
   );
 }
@@ -156,7 +159,7 @@ function TasksCard({ tasks, onNavigate }) {
   );
 }
 
-function GymCard({ challenge, currentUser, onNavigate, onReload }) {
+function GymCard({ challenge, currentUser, users, onNavigate, onReload }) {
   const [weighInput, setWeighInput] = useState("");
 
   if (!challenge) {
@@ -167,41 +170,56 @@ function GymCard({ challenge, currentUser, onNavigate, onReload }) {
     );
   }
 
-  const raw = challenge.participants[currentUser] || {};
-  const weighIns = raw.weighIns || [];
-  const workouts = raw.workouts || (raw.workoutDates || []).map((d) => ({ date: d, type: "Other" })); // fall back for any not-yet-migrated data
+  const p = normalizeParticipant(challenge.participants[currentUser], challenge);
   const today = todayStr();
-  const todaysWeighIn = weighIns.find((w) => w.date === today);
-  const workedOutToday = workouts.some((w) => w.date === today);
+  const todaysWeighIn = p.weighIns.find((w) => w.date === today);
+  const todaysWorkout = p.workouts.find((w) => w.date === today);
+  const target = targetForDate(p, challenge, today);
+  const status = todaysWeighIn ? weightStatus(target, todaysWeighIn.weight, p.startingWeight) : "none";
 
   async function logWeight() {
     if (weighInput === "") return;
-    const others = weighIns.filter((w) => w.date !== today);
+    const others = p.weighIns.filter((w) => w.date !== today);
     const nextWeighIns = [...others, { date: today, weight: Number(weighInput), at: new Date().toISOString() }].sort((a, b) => a.date.localeCompare(b.date));
-    const nextParticipants = { ...challenge.participants, [currentUser]: { ...raw, weighIns: nextWeighIns } };
+    const nextParticipants = { ...challenge.participants, [currentUser]: { ...p, weighIns: nextWeighIns } };
     await updateChallenge(challenge.id, { participants: nextParticipants });
     setWeighInput("");
     onReload();
   }
 
-  async function toggleToday() {
-    const nextWorkouts = workedOutToday ? workouts.filter((w) => w.date !== today) : [...workouts, { date: today, type: "Other" }];
-    const nextParticipants = { ...challenge.participants, [currentUser]: { ...raw, workouts: nextWorkouts } };
+  async function setWorkoutType(type) {
+    const others = p.workouts.filter((w) => w.date !== today);
+    const nextWorkouts = type ? [...others, { date: today, type }] : others;
+    const nextParticipants = { ...challenge.participants, [currentUser]: { ...p, workouts: nextWorkouts } };
     await updateChallenge(challenge.id, { participants: nextParticipants });
     onReload();
   }
 
   return (
     <CardShell icon={<Dumbbell size={18} color={STYLES.wax} />} title="RAPTR Gym" onNavigate={onNavigate} section="gym">
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input type="number" placeholder={todaysWeighIn ? String(todaysWeighIn.weight) : "Log today's weight"} value={weighInput} onChange={(e) => setWeighInput(e.target.value)} style={{ ...selectStyle(), width: 170 }} />
-          <button onClick={logWeight} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}>Log</button>
-        </div>
-        <button onClick={toggleToday} style={{ display: "flex", alignItems: "center", gap: 6, background: workedOutToday ? STYLES.green : "#fff", color: workedOutToday ? "#fff" : STYLES.slate, border: `1px solid ${workedOutToday ? STYLES.green : STYLES.ink + "33"}`, borderRadius: 4, padding: "7px 12px", cursor: "pointer", fontSize: 13 }}>
-          {workedOutToday && <Check size={14} />} {workedOutToday ? "Worked out today" : "Mark today's workout"}
-        </button>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 4 }}>
+        {todaysWeighIn ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLOR[status], flexShrink: 0 }} />
+            <span style={{ color: STYLES.slate }}>{today}</span>
+            <span>{todaysWeighIn.weight}{target != null ? ` (target ${target.toFixed(1)})` : ""}</span>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="number" placeholder="Log today's weight" value={weighInput} onChange={(e) => setWeighInput(e.target.value)} style={{ ...selectStyle(), width: 170 }} />
+            <button onClick={logWeight} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}>Log</button>
+          </div>
+        )}
+
+        <select value={todaysWorkout?.type || ""} onChange={(e) => setWorkoutType(e.target.value || null)} style={{ ...selectStyle(), color: todaysWorkout ? STYLES.green : STYLES.slate, fontWeight: todaysWorkout ? 600 : 400 }}>
+          <option value="">Today's workout — not logged —</option>
+          {WORKOUT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
       </div>
+
+      <Suspense fallback={<div style={{ fontSize: 12, color: STYLES.slate, marginTop: 14 }}>Loading chart…</div>}>
+        <WeightChart challenge={challenge} users={users} />
+      </Suspense>
     </CardShell>
   );
 }
