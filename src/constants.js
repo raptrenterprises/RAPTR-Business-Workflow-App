@@ -270,7 +270,9 @@ export function selectStyle() {
 // ---- date range helpers for the calendar ----
 export function startOfWeek(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() - d.getDay());
+  const day = d.getDay(); // 0 = Sunday ... 6 = Saturday
+  const diff = day === 0 ? 6 : day - 1; // days to step back to reach Monday
+  d.setDate(d.getDate() - diff);
   return d;
 }
 export function endOfWeek(dateStr) {
