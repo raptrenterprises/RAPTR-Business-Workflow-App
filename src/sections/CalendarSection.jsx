@@ -10,7 +10,7 @@ import { fetchEvents, insertEvent, updateEvent, deleteEventRow, subscribeEvents 
 import { fetchTasks, subscribeTasks } from "../lib/tasksApi";
 import { fetchThreads, subscribeThreads } from "../lib/threadsApi";
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function isOpen(item) {
   return item.kind === "task" ? !item.completed : item.status !== "complete";
@@ -394,19 +394,23 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
             editingId === e.id ? (
               <EventForm key={e.id} draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(e.id)} onCancel={onCancelEdit} saveLabel="Save" />
             ) : (
-              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}14`, borderLeft: `4px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, border: `1px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}55`, borderLeftWidth: 4, borderRadius: 4, padding: "8px 10px" }}>
-                <CalendarDays size={14} color={EVENT_CATEGORY_COLOR[e.category] || STYLES.brass} />
-                <div onClick={() => onSelectEvent(e)} style={{ flex: 1, cursor: "pointer" }}>
+              <div key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 14, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}14`, borderLeft: `4px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, border: `1px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}55`, borderLeftWidth: 4, borderRadius: 4, padding: "8px 10px" }}>
+                <CalendarDays size={14} color={EVENT_CATEGORY_COLOR[e.category] || STYLES.brass} style={{ marginTop: 2, flexShrink: 0 }} />
+                <div onClick={() => onSelectEvent(e)} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
                   <div>
                     {eventLabel(e)} {e.endDate && e.endDate !== e.date && <span style={{ fontSize: 11, color: STYLES.slate }}>({e.date} → {e.endDate})</span>}
                     {e.recurrence && e.recurrence !== "none" && <Repeat size={11} color={STYLES.slate} style={{ marginLeft: 6, verticalAlign: "middle" }} />}
                   </div>
-                  {e.description && <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description}</div>}
+                  {e.description && (
+                    <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {e.description}
+                    </div>
+                  )}
                 </div>
-                {!e.allDay && e.time && <span style={{ fontSize: 12, color: STYLES.slate }}>{e.time}</span>}
-                <span style={{ fontSize: 10, color: EVENT_CATEGORY_COLOR[e.category] || STYLES.slate, fontWeight: 700 }}>{e.category}</span>
-                <button onClick={() => onStartEdit(e)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate }}><Pencil size={13} /></button>
-                <button onClick={() => onRemoveEvent(e.id)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate }}><Trash2 size={13} /></button>
+                {!e.allDay && e.time && <span style={{ fontSize: 12, color: STYLES.slate, flexShrink: 0 }}>{e.time}</span>}
+                <span style={{ fontSize: 10, color: EVENT_CATEGORY_COLOR[e.category] || STYLES.slate, fontWeight: 700, flexShrink: 0 }}>{e.category}</span>
+                <button onClick={() => onStartEdit(e)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Pencil size={13} /></button>
+                <button onClick={() => onRemoveEvent(e.id)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Trash2 size={13} /></button>
               </div>
             )
           )}
@@ -422,23 +426,24 @@ function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView, onSelectE
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return toStr(d); });
   return (
     <>
-      <div style={{ width: "100%", maxWidth: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(120px, 1fr))", gap: 8, width: "max-content", minWidth: "100%" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {days.map((d) => {
           const { events, tasks } = dayItemsFor(d);
           const isToday = d === todayStr();
+          const weekdayLabel = new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", timeZone: TIME_ZONE });
           return (
-            <div key={d} onClick={() => { onPick(d); setView("day"); }} style={{ background: "#fff", border: `1px solid ${isToday ? STYLES.wax : STYLES.ink + "22"}`, borderRadius: 6, padding: 8, cursor: "pointer", minHeight: 120 }}>
-              <div style={{ fontSize: 11, color: STYLES.slate }}>{WEEKDAYS[new Date(d + "T00:00:00").getDay()]}</div>
-              <div style={{ fontSize: 15, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink, marginBottom: 4 }}>{Number(d.slice(8, 10))}</div>
+            <div key={d} onClick={() => { onPick(d); setView("day"); }} style={{ background: "#fff", border: `1px solid ${isToday ? STYLES.wax : STYLES.ink + "22"}`, borderRadius: 6, padding: 10, cursor: "pointer" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 15, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink }}>{Number(d.slice(8, 10))}</span>
+                <span style={{ fontSize: 12, color: STYLES.slate }}>{weekdayLabel}</span>
+              </div>
               {events.map((e) => (
-                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 11, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `3px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "2px 5px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{eventLabel(e)}</div>
+                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 12, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `3px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "3px 6px", marginBottom: 3, cursor: "pointer", wordBreak: "break-word" }}>{eventLabel(e)}</div>
               ))}
               <TasksBox items={tasks} label="Tasks" />
             </div>
           );
         })}
-        </div>
       </div>
       <BucketPanel title="This Week — Medium priority" items={weekBucket} />
     </>
@@ -457,7 +462,7 @@ function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView, onSelec
 
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: STYLES.ink + "22", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 1, background: STYLES.ink + "22", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, overflow: "hidden" }}>
         {WEEKDAYS.map((w) => (
           <div key={w} style={{ background: STYLES.brass + "33", textAlign: "center", fontSize: 11, fontWeight: 700, padding: "6px 0", color: STYLES.ink }}>{w}</div>
         ))}
@@ -466,10 +471,10 @@ function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView, onSelec
           const isToday = d === todayStr();
           const inMonth = thisMonth(d);
           return (
-            <div key={d} onClick={() => { onPick(d); setView("day"); }} style={{ background: inMonth ? "#fff" : STYLES.gray, minHeight: 88, padding: 6, cursor: "pointer", opacity: inMonth ? 1 : 0.6 }}>
+            <div key={d} onClick={() => { onPick(d); setView("day"); }} style={{ background: inMonth ? "#fff" : STYLES.gray, minHeight: 88, minWidth: 0, padding: 6, cursor: "pointer", opacity: inMonth ? 1 : 0.6, overflow: "hidden" }}>
               <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink, marginBottom: 3 }}>{Number(d.slice(8, 10))}</div>
               {events.slice(0, 2).map((e) => (
-                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 10, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `2px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "1px 4px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{eventLabel(e)}</div>
+                <div key={e.id} onClick={(ev) => { ev.stopPropagation(); onSelectEvent(e); }} style={{ fontSize: 10, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}22`, borderLeft: `2px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, borderRadius: 3, padding: "1px 4px", marginBottom: 2, cursor: "pointer", wordBreak: "break-word", whiteSpace: "normal" }}>{eventLabel(e)}</div>
               ))}
               {tasks.length > 0 && (
                 <div style={{ fontSize: 10, color: urgencyColor(effectiveUrgency(tasks[0])), fontWeight: 700 }}>● {tasks.length} task{tasks.length > 1 ? "s" : ""}</div>
