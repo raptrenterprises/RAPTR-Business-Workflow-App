@@ -5,9 +5,11 @@ import {
   uid, todayStr, advanceDate, importanceColor, urgencyColor, selectStyle,
 } from "../constants";
 import { TabButton, ImportanceSelect, UrgencyOrDueDateField, Badge, Legend, SortFilterBar, CenterMsg, EmptyMsg, ErrorBar } from "../components/Shared";
+import { AttachmentManager, AttachmentToggle } from "../components/Attachments";
+import { deleteAttachment } from "../lib/storageApi";
 import { fetchTasks, insertTask, updateTask, deleteTaskRow, subscribeTasks } from "../lib/tasksApi";
 
-const emptyTaskDraft = () => ({ title: "", importance: "Medium", urgency: "Medium", urgencyMode: "urgency", dueDate: "", recurrence: "none", owner: "shared" });
+const emptyTaskDraft = () => ({ id: uid(), title: "", importance: "Medium", urgency: "Medium", urgencyMode: "urgency", dueDate: "", recurrence: "none", owner: "shared", attachments: [] });
 
 export default function TasksSection({ currentUser, users }) {
   const [tasks, setTasks] = useState([]);
@@ -22,6 +24,7 @@ export default function TasksSection({ currentUser, users }) {
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [error, setError] = useState("");
+  const [attachmentsOpenId, setAttachmentsOpenId] = useState(null);
 
   const reload = useCallback(async () => {
     try { setTasks(await fetchTasks()); } catch (e) { setError("Couldn't load tasks: " + e.message); }
@@ -39,15 +42,28 @@ export default function TasksSection({ currentUser, users }) {
     const owner = tab === "all" ? draft.owner : tab;
     const usingDueDate = draft.urgencyMode === "dueDate" && draft.dueDate;
     const task = {
-      id: uid(), title, owner, completed: false, createdBy: currentUser, createdAt: new Date().toISOString(),
+      id: draft.id, title, owner, completed: false, createdBy: currentUser, createdAt: new Date().toISOString(),
       importance: draft.importance,
       urgency: usingDueDate ? null : draft.urgency,
       dueDate: usingDueDate ? draft.dueDate : null,
       recurrence: draft.recurrence,
+      attachments: draft.attachments,
     };
     setDraft({ ...emptyTaskDraft(), owner: draft.owner });
     setComposing(false);
     try { await insertTask(task); reload(); } catch (e) { setError("Couldn't add task: " + e.message); }
+  }
+
+  // Discards a not-yet-saved task draft, cleaning up any files the user
+  // had already attached before deciding not to save.
+  async function cancelCompose() {
+    setComposing(false);
+    for (const a of draft.attachments) { try { await deleteAttachment(a.path); } catch { /* best effort */ } }
+    setDraft({ ...emptyTaskDraft(), owner: draft.owner });
+  }
+
+  async function persistTaskAttachments(id, nextAttachments) {
+    try { await updateTask(id, { attachments: nextAttachments }); reload(); } catch (e) { setError("Couldn't update attachments: " + e.message); }
   }
 
   async function toggleTask(id) {
@@ -163,8 +179,11 @@ export default function TasksSection({ currentUser, users }) {
                 <button onClick={addTask} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "9px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
                   <Plus size={16} /> Add
                 </button>
-                <button onClick={() => setComposing(false)} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "9px 12px", cursor: "pointer" }}><X size={15} /></button>
+                <button onClick={cancelCompose} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "9px 12px", cursor: "pointer" }}><X size={15} /></button>
               </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <AttachmentManager folder={`tasks/${draft.id}`} attachments={draft.attachments} onChange={(next) => setDraft({ ...draft, attachments: next })} uploadedBy={currentUser} compact />
             </div>
           </div>
         ) : (
@@ -254,12 +273,18 @@ export default function TasksSection({ currentUser, users }) {
                         </span>
                       )}
                       {t.createdBy !== t.owner && <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>added by {t.createdBy}</span>}
+                      <AttachmentToggle count={(t.attachments || []).length} open={attachmentsOpenId === t.id} onClick={() => setAttachmentsOpenId((id) => (id === t.id ? null : t.id))} />
                     </div>
                     <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: "auto" }}>
                       <button onClick={() => startEdit(t)} aria-label="Edit task" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, padding: 4 }}><Pencil size={15} /></button>
                       <button onClick={() => deleteTask(t.id)} aria-label="Delete task" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, padding: 4 }}><Trash2 size={15} /></button>
                     </div>
                   </div>
+                  {attachmentsOpenId === t.id && (
+                    <div style={{ borderTop: `1px solid ${STYLES.ink}14`, paddingTop: 8 }}>
+                      <AttachmentManager folder={`tasks/${t.id}`} attachments={t.attachments || []} onChange={(next) => persistTaskAttachments(t.id, next)} uploadedBy={currentUser} compact />
+                    </div>
+                  )}
                 </li>
               );
             })}

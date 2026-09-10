@@ -13,7 +13,8 @@ create table if not exists tasks (
   importance text not null default 'Medium',
   urgency text default 'Medium', -- nullable: null means urgency is derived from due_date instead
   due_date date,
-  recurrence text not null default 'none'
+  recurrence text not null default 'none',
+  attachments jsonb not null default '[]'
 );
 
 create table if not exists threads (
@@ -29,7 +30,7 @@ create table if not exists threads (
   seen_by text[] not null default '{}',
   completed_at timestamptz,
   due_date date,
-  messages jsonb not null default '[]'      -- [{id, from, body, at}, ...]
+  messages jsonb not null default '[]'      -- [{id, from, body, at, attachments: []}, ...]
 );
 
 create table if not exists events (
@@ -44,7 +45,8 @@ create table if not exists events (
   recurrence text not null default 'none', -- 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
   recurrence_end date, -- null = repeats indefinitely
   created_by text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  attachments jsonb not null default '[]'
 );
 
 create table if not exists gym_challenges (
@@ -54,6 +56,7 @@ create table if not exists gym_challenges (
   target_workouts_per_week int not null default 3,
   created_by text not null,
   created_at timestamptz not null default now(),
+  archived boolean not null default false,
   -- { "Cathy": { startingWeight, targetWeight, weighIns: [{week, weight, at}], workoutDates: [date,...] }, "Evan": {...} }
   participants jsonb not null default '{}'
 );
@@ -78,6 +81,23 @@ create policy "authenticated read/write events" on events
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated read/write gym_challenges" on gym_challenges
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+-- Storage bucket for file attachments (tasks, threads, calendar events).
+-- Public read (so links/downloads work directly), writes/deletes require login.
+insert into storage.buckets (id, name, public)
+values ('attachments', 'attachments', true)
+on conflict (id) do nothing;
+
+drop policy if exists "authenticated upload attachments" on storage.objects;
+drop policy if exists "authenticated delete attachments" on storage.objects;
+drop policy if exists "public read attachments" on storage.objects;
+
+create policy "public read attachments" on storage.objects
+  for select using (bucket_id = 'attachments');
+create policy "authenticated upload attachments" on storage.objects
+  for insert with check (bucket_id = 'attachments' and auth.role() = 'authenticated');
+create policy "authenticated delete attachments" on storage.objects
+  for delete using (bucket_id = 'attachments' and auth.role() = 'authenticated');
 
 -- Realtime: lets both of you see each other's changes live.
 alter publication supabase_realtime add table tasks;

@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Plus, Trash2, X, Eye, ChevronDown, ChevronUp, CheckCircle2, RotateCcw, Send, CalendarDays, SlidersHorizontal } from "lucide-react";
 import { STYLES, IMPORTANCE_WEIGHT, URGENCY_WEIGHT, uid, importanceColor, urgencyColor, selectStyle, priorityRank, effectiveUrgency, TIME_ZONE } from "../constants";
 import { ImportanceSelect, UrgencyOrDueDateField, Badge, Legend, SortFilterBar, CenterMsg, EmptyMsg, ErrorBar } from "../components/Shared";
+import { AttachmentManager, AttachmentList } from "../components/Attachments";
+import { deleteAttachment } from "../lib/storageApi";
 import { fetchThreads, insertThread, updateThread, deleteThreadRow, subscribeThreads } from "../lib/threadsApi";
 
-const emptyThreadDraft = (users, currentUser) => ({ title: "", body: "", to: users.find((u) => u !== currentUser) || users[0], importance: "Medium", urgency: "Medium", urgencyMode: "urgency", dueDate: "" });
+const emptyThreadDraft = (users, currentUser) => ({ id: uid(), messageId: uid(), title: "", body: "", to: users.find((u) => u !== currentUser) || users[0], importance: "Medium", urgency: "Medium", urgencyMode: "urgency", dueDate: "", attachments: [] });
 
 export default function ThreadsSection({ currentUser, users }) {
   const [threads, setThreads] = useState([]);
@@ -13,6 +15,8 @@ export default function ThreadsSection({ currentUser, users }) {
   const [composing, setComposing] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [replyText, setReplyText] = useState("");
+  const [replyAttachments, setReplyAttachments] = useState([]);
+  const [replyMessageId, setReplyMessageId] = useState(() => uid());
   const [sortBy, setSortBy] = useState("priority");
   const [minImportance, setMinImportance] = useState("Any");
   const [minUrgency, setMinUrgency] = useState("Any");
@@ -35,27 +39,65 @@ export default function ThreadsSection({ currentUser, users }) {
     if (!title || !body) return;
     const usingDueDate = draft.urgencyMode === "dueDate" && draft.dueDate;
     const thread = {
-      id: uid(), title, participants: [currentUser, draft.to], createdBy: currentUser, createdAt: new Date().toISOString(),
+      id: draft.id, title, participants: [currentUser, draft.to], createdBy: currentUser, createdAt: new Date().toISOString(),
       importance: draft.importance,
       urgency: usingDueDate ? null : draft.urgency,
       status: "active", turn: draft.to, seenBy: [currentUser],
       completedAt: null, dueDate: usingDueDate ? draft.dueDate : null,
-      messages: [{ id: uid(), from: currentUser, body, at: new Date().toISOString() }],
+      messages: [{ id: draft.messageId, from: currentUser, body, at: new Date().toISOString(), attachments: draft.attachments }],
     };
     setDraft(emptyThreadDraft(users, currentUser));
     setComposing(false);
     try { await insertThread(thread); setExpandedId(thread.id); reload(); } catch (e) { setError("Couldn't send thread: " + e.message); }
   }
 
+  // Discards a not-yet-sent new-thread draft, cleaning up any already-uploaded attachments.
+  async function cancelCompose() {
+    setComposing(false);
+    for (const a of draft.attachments) { try { await deleteAttachment(a.path); } catch { /* best effort */ } }
+    setDraft(emptyThreadDraft(users, currentUser));
+  }
+
+  // Switching which thread is expanded (or collapsing it) — clears any
+  // pending, unsent reply text/attachments and cleans up files that were
+  // already uploaded for a reply that's now being abandoned.
+  async function selectThread(id) {
+    if (id !== expandedId) {
+      for (const a of replyAttachments) { try { await deleteAttachment(a.path); } catch { /* best effort */ } }
+      setReplyText("");
+      setReplyAttachments([]);
+      setReplyMessageId(uid());
+    }
+    setExpandedId(id);
+  }
+
   async function reply(threadId) {
     const text = replyText.trim();
-    if (!text) return;
+    if (!text && replyAttachments.length === 0) return;
     const th = threads.find((t) => t.id === threadId);
     if (!th) return;
     const other = th.participants.find((p) => p !== currentUser) || th.participants[0];
-    const newMessages = [...th.messages, { id: uid(), from: currentUser, body: text, at: new Date().toISOString() }];
+    const newMessages = [...th.messages, { id: replyMessageId, from: currentUser, body: text, at: new Date().toISOString(), attachments: replyAttachments }];
     setReplyText("");
+    setReplyAttachments([]);
+    setReplyMessageId(uid());
     try { await updateThread(threadId, { status: "active", turn: other, seenBy: [currentUser], messages: newMessages }); reload(); } catch (e) { setError("Couldn't send reply: " + e.message); }
+  }
+
+  async function updateMessageAttachments(threadId, messageId, nextAttachments) {
+    const th = threads.find((t) => t.id === threadId);
+    if (!th) return;
+    const newMessages = th.messages.map((m) => (m.id === messageId ? { ...m, attachments: nextAttachments } : m));
+    try { await updateThread(threadId, { messages: newMessages }); reload(); } catch (e) { setError("Couldn't update attachments: " + e.message); }
+  }
+
+  async function removeMessageAttachment(threadId, messageId, attachment) {
+    const th = threads.find((t) => t.id === threadId);
+    if (!th) return;
+    const msg = th.messages.find((m) => m.id === messageId);
+    const nextAttachments = (msg?.attachments || []).filter((a) => a.path !== attachment.path);
+    await updateMessageAttachments(threadId, messageId, nextAttachments);
+    try { await deleteAttachment(attachment.path); } catch { /* best effort */ }
   }
 
   async function toggleSeen(threadId) {
@@ -161,8 +203,11 @@ export default function ThreadsSection({ currentUser, users }) {
               <ImportanceSelect value={draft.importance} onChange={(v) => setDraft({ ...draft, importance: v })} />
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                 <button onClick={sendThread} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "9px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}><Send size={15} /> Send</button>
-                <button onClick={() => { setComposing(false); setDraft(emptyThreadDraft(users, currentUser)); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "9px 12px", cursor: "pointer" }}><X size={15} /></button>
+                <button onClick={cancelCompose} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "9px 12px", cursor: "pointer" }}><X size={15} /></button>
               </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <AttachmentManager folder={`threads/${draft.id}/${draft.messageId}`} attachments={draft.attachments} onChange={(next) => setDraft({ ...draft, attachments: next })} uploadedBy={currentUser} compact />
             </div>
           </div>
         ) : (
@@ -189,43 +234,51 @@ export default function ThreadsSection({ currentUser, users }) {
               title="Waiting on you — new"
               threads={groups.waitingOnYouNew}
               currentUser={currentUser}
-              expandedId={expandedId} setExpandedId={setExpandedId}
+              expandedId={expandedId} setExpandedId={selectThread}
               replyText={replyText} setReplyText={setReplyText}
+              replyAttachments={replyAttachments} setReplyAttachments={setReplyAttachments} replyMessageId={replyMessageId}
               onReply={reply} onToggleSeen={toggleSeen} onMarkComplete={markComplete}
               onReopen={reopenThread} onUpdateLevel={updateLevel} onUpdateDueDate={updateDueDate}
               onSetUrgencyMode={setThreadUrgencyMode} onDelete={deleteThread}
+              onUpdateMessageAttachments={removeMessageAttachment}
             />
             <ThreadGroup
               title="Waiting on you — seen"
               threads={groups.waitingOnYouSeen}
               currentUser={currentUser}
-              expandedId={expandedId} setExpandedId={setExpandedId}
+              expandedId={expandedId} setExpandedId={selectThread}
               replyText={replyText} setReplyText={setReplyText}
+              replyAttachments={replyAttachments} setReplyAttachments={setReplyAttachments} replyMessageId={replyMessageId}
               onReply={reply} onToggleSeen={toggleSeen} onMarkComplete={markComplete}
               onReopen={reopenThread} onUpdateLevel={updateLevel} onUpdateDueDate={updateDueDate}
               onSetUrgencyMode={setThreadUrgencyMode} onDelete={deleteThread}
+              onUpdateMessageAttachments={removeMessageAttachment}
             />
             <ThreadGroup
               title={`Waiting on ${users.find((u) => u !== currentUser) || "them"}`}
               threads={groups.waitingOnOther}
               currentUser={currentUser}
               showOtherSeenStatus
-              expandedId={expandedId} setExpandedId={setExpandedId}
+              expandedId={expandedId} setExpandedId={selectThread}
               replyText={replyText} setReplyText={setReplyText}
+              replyAttachments={replyAttachments} setReplyAttachments={setReplyAttachments} replyMessageId={replyMessageId}
               onReply={reply} onToggleSeen={toggleSeen} onMarkComplete={markComplete}
               onReopen={reopenThread} onUpdateLevel={updateLevel} onUpdateDueDate={updateDueDate}
               onSetUrgencyMode={setThreadUrgencyMode} onDelete={deleteThread}
+              onUpdateMessageAttachments={removeMessageAttachment}
             />
             <ThreadGroup
               title="Complete"
               threads={groups.complete}
               currentUser={currentUser}
               archived
-              expandedId={expandedId} setExpandedId={setExpandedId}
+              expandedId={expandedId} setExpandedId={selectThread}
               replyText={replyText} setReplyText={setReplyText}
+              replyAttachments={replyAttachments} setReplyAttachments={setReplyAttachments} replyMessageId={replyMessageId}
               onReply={reply} onToggleSeen={toggleSeen} onMarkComplete={markComplete}
               onReopen={reopenThread} onUpdateLevel={updateLevel} onUpdateDueDate={updateDueDate}
               onSetUrgencyMode={setThreadUrgencyMode} onDelete={deleteThread}
+              onUpdateMessageAttachments={removeMessageAttachment}
             />
           </>
         )}
@@ -251,7 +304,9 @@ function ThreadGroup({ title, threads, archived, showOtherSeenStatus, ...rest })
 function ThreadCard({
   th, currentUser, archived, showOtherSeenStatus,
   expandedId, setExpandedId, replyText, setReplyText,
+  replyAttachments, setReplyAttachments, replyMessageId,
   onReply, onToggleSeen, onMarkComplete, onReopen, onUpdateLevel, onUpdateDueDate, onSetUrgencyMode, onDelete,
+  onUpdateMessageAttachments,
 }) {
   const isExpanded = expandedId === th.id;
   const isComplete = th.status === "complete";
@@ -299,15 +354,21 @@ function ThreadCard({
                   {m.from} · {new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: TIME_ZONE })}
                 </div>
                 <div style={{ background: m.from === currentUser ? STYLES.brass + "22" : STYLES.ink + "0d", border: `1px solid ${STYLES.ink}14`, borderRadius: 8, padding: "8px 12px", fontSize: 14 }}>{m.body}</div>
+                <AttachmentList attachments={m.attachments} onRemove={(a) => onUpdateMessageAttachments(th.id, m.id, a)} />
               </div>
             ))}
           </div>
           {!isComplete ? (
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <textarea value={expandedId === th.id ? replyText : ""} onChange={(e) => setReplyText(e.target.value)} placeholder={`Reply to ${other}…`} rows={2} style={{ flex: 1, boxSizing: "border-box", padding: "8px 10px", borderRadius: 4, border: `1px solid ${STYLES.ink}33`, fontSize: 14, fontFamily: "inherit", resize: "vertical" }} />
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <button onClick={() => onReply(th.id)} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><Send size={13} /> Reply</button>
-                <button onClick={() => onMarkComplete(th.id)} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><CheckCircle2 size={13} /> Complete</button>
+            <div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <textarea value={expandedId === th.id ? replyText : ""} onChange={(e) => setReplyText(e.target.value)} placeholder={`Reply to ${other}…`} rows={2} style={{ flex: 1, boxSizing: "border-box", padding: "8px 10px", borderRadius: 4, border: `1px solid ${STYLES.ink}33`, fontSize: 14, fontFamily: "inherit", resize: "vertical" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <button onClick={() => onReply(th.id)} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><Send size={13} /> Reply</button>
+                  <button onClick={() => onMarkComplete(th.id)} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><CheckCircle2 size={13} /> Complete</button>
+                </div>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <AttachmentManager folder={`threads/${th.id}/${replyMessageId}`} attachments={expandedId === th.id ? replyAttachments : []} onChange={setReplyAttachments} uploadedBy={currentUser} compact />
               </div>
             </div>
           ) : (

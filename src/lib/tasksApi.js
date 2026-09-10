@@ -12,6 +12,7 @@ function fromRow(r) {
     urgency: r.urgency,
     dueDate: r.due_date,
     recurrence: r.recurrence,
+    attachments: r.attachments || [],
   };
 }
 
@@ -36,6 +37,7 @@ export async function insertTask(task) {
     urgency: task.urgency,
     due_date: task.dueDate,
     recurrence: task.recurrence,
+    attachments: task.attachments || [],
   });
   if (error) throw error;
 }
@@ -49,6 +51,7 @@ export async function updateTask(id, patch) {
   if ("urgency" in patch) dbPatch.urgency = patch.urgency;
   if ("dueDate" in patch) dbPatch.due_date = patch.dueDate;
   if ("recurrence" in patch) dbPatch.recurrence = patch.recurrence;
+  if ("attachments" in patch) dbPatch.attachments = patch.attachments;
   const { error } = await supabase.from("tasks").update(dbPatch).eq("id", id);
   if (error) throw error;
 }

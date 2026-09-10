@@ -9,6 +9,7 @@ function fromRow(r) {
     createdBy: r.created_by,
     createdAt: r.created_at,
     participants: r.participants || {},
+    archived: r.archived || false,
   };
 }
 
@@ -27,6 +28,7 @@ export async function insertChallenge(c) {
     created_by: c.createdBy,
     created_at: c.createdAt,
     participants: c.participants,
+    archived: c.archived || false,
   });
   if (error) throw error;
 }
@@ -37,6 +39,7 @@ export async function updateChallenge(id, patch) {
   if ("endDate" in patch) dbPatch.end_date = patch.endDate;
   if ("targetWorkoutsPerWeek" in patch) dbPatch.target_workouts_per_week = patch.targetWorkoutsPerWeek;
   if ("participants" in patch) dbPatch.participants = patch.participants;
+  if ("archived" in patch) dbPatch.archived = patch.archived;
   const { error } = await supabase.from("gym_challenges").update(dbPatch).eq("id", id);
   if (error) throw error;
 }

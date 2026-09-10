@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
-import { Plus, Pencil, Save, X, Dumbbell, Trash2 } from "lucide-react";
+import { Pencil, Save, X, Dumbbell, Trash2, Archive, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
 import { STYLES, uid, todayStr, daysBetween, addDays, selectStyle, TIME_ZONE, WORKOUT_TYPES } from "../constants";
 import { CenterMsg, EmptyMsg, ErrorBar } from "../components/Shared";
 import { fetchChallenges, insertChallenge, updateChallenge, deleteChallengeRow, subscribeChallenges } from "../lib/gymApi";
@@ -7,14 +7,19 @@ import { normalizeParticipant, weekIndexForDate, totalWeeks, targetForDate, weig
 
 const WeightChart = lazy(() => import("../components/WeightChart"));
 
+const emptyDraft = () => ({ startDate: todayStr(), endDate: "", targetWorkoutsPerWeek: 3 });
+
 export default function GymSection({ currentUser, users }) {
   const [challenges, setChallenges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
-  const [draft, setDraft] = useState({ startDate: todayStr(), endDate: "", targetWorkoutsPerWeek: 3 });
+  const [draft, setDraft] = useState(emptyDraft());
+  const [formError, setFormError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [error, setError] = useState("");
+  const [expandedArchived, setExpandedArchived] = useState(() => new Set());
 
   const reload = useCallback(async () => {
     try { setChallenges(await fetchChallenges()); } catch (e) { setError("Couldn't load challenges: " + e.message); }
@@ -27,13 +32,27 @@ export default function GymSection({ currentUser, users }) {
   }, [reload]);
 
   async function startChallenge() {
-    if (!draft.startDate || !draft.endDate) return;
+    setFormError("");
+    if (!draft.startDate) { setFormError("Pick a start date."); return; }
+    if (!draft.endDate) { setFormError("Pick an end date."); return; }
+    if (draft.endDate < draft.startDate) { setFormError("End date can't be before the start date."); return; }
+    const perWeek = Number(draft.targetWorkoutsPerWeek);
+    if (!perWeek || perWeek < 1) { setFormError("Workouts/week must be at least 1."); return; }
+
     const participants = {};
     users.forEach((u) => { participants[u] = emptyParticipant(); });
-    const challenge = { id: uid(), startDate: draft.startDate, endDate: draft.endDate, targetWorkoutsPerWeek: Number(draft.targetWorkoutsPerWeek) || 1, createdBy: currentUser, createdAt: new Date().toISOString(), participants };
-    setDraft({ startDate: todayStr(), endDate: "", targetWorkoutsPerWeek: 3 });
-    setComposing(false);
-    try { await insertChallenge(challenge); reload(); } catch (e) { setError("Couldn't start challenge: " + e.message); }
+    const challenge = { id: uid(), startDate: draft.startDate, endDate: draft.endDate, targetWorkoutsPerWeek: perWeek, createdBy: currentUser, createdAt: new Date().toISOString(), participants, archived: false };
+    setSubmitting(true);
+    try {
+      await insertChallenge(challenge);
+      setDraft(emptyDraft());
+      setComposing(false);
+      reload();
+    } catch (e) {
+      setFormError("Couldn't start challenge: " + e.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function startEditChallenge(c) {
@@ -47,6 +66,8 @@ export default function GymSection({ currentUser, users }) {
   }
 
   async function saveEditChallenge(id, challenge) {
+    if (!editDraft.startDate || !editDraft.endDate) { setError("Start and end date are both required."); return; }
+    if (editDraft.endDate < editDraft.startDate) { setError("End date can't be before the start date."); return; }
     try {
       const nextParticipants = { ...challenge.participants };
       users.forEach((u) => {
@@ -66,6 +87,18 @@ export default function GymSection({ currentUser, users }) {
   async function deleteChallenge(id) {
     if (!window.confirm("Delete this challenge? This removes all logged weights and workouts for it and can't be undone.")) return;
     try { await deleteChallengeRow(id); reload(); } catch (e) { setError("Couldn't delete challenge: " + e.message); }
+  }
+
+  async function setArchived(id, archived) {
+    try { await updateChallenge(id, { archived }); reload(); } catch (e) { setError("Couldn't update: " + e.message); }
+  }
+
+  function toggleArchivedExpand(id) {
+    setExpandedArchived((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
 
   async function patchParticipant(challenge, user, patch) {
@@ -90,27 +123,33 @@ export default function GymSection({ currentUser, users }) {
 
   if (loading) return <CenterMsg>Loading RAPTR Gym…</CenterMsg>;
 
+  const activeChallenges = challenges.filter((c) => !c.archived);
+  const archivedChallenges = challenges.filter((c) => c.archived);
+
   return (
     <>
       <ErrorBar>{error}</ErrorBar>
       <main style={{ maxWidth: 820, margin: "0 auto", padding: "24px 20px" }}>
         {composing ? (
-          <div style={{ background: "#fff", border: `1px solid ${STYLES.brass}`, borderRadius: 6, padding: 14, marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-            <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
-              Start <input type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} style={selectStyle()} />
-            </label>
-            <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
-              End <input type="date" value={draft.endDate} onChange={(e) => setDraft({ ...draft, endDate: e.target.value })} style={selectStyle()} />
-            </label>
-            <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
-              Workouts/week <input type="number" min={1} max={14} value={draft.targetWorkoutsPerWeek} onChange={(e) => setDraft({ ...draft, targetWorkoutsPerWeek: e.target.value })} style={{ ...selectStyle(), width: 56 }} />
-            </label>
-            <span style={{ fontSize: 12, color: STYLES.slate }}>(starting/target weights are set after creation, via the pencil icon)</span>
-            <button onClick={startChallenge} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "8px 14px", cursor: "pointer", fontSize: 13 }}>Start Challenge</button>
-            <button onClick={() => setComposing(false)} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "8px 10px", cursor: "pointer" }}><X size={14} /></button>
+          <div style={{ background: "#fff", border: `1px solid ${STYLES.brass}`, borderRadius: 6, padding: 14, marginBottom: 20 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
+                Start <input type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} style={selectStyle()} />
+              </label>
+              <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
+                End <input type="date" value={draft.endDate} min={draft.startDate} onChange={(e) => setDraft({ ...draft, endDate: e.target.value })} style={selectStyle()} />
+              </label>
+              <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
+                Workouts/week <input type="number" min={1} max={14} value={draft.targetWorkoutsPerWeek} onChange={(e) => setDraft({ ...draft, targetWorkoutsPerWeek: e.target.value })} style={{ ...selectStyle(), width: 56 }} />
+              </label>
+              <span style={{ fontSize: 12, color: STYLES.slate }}>(starting/target weights are set after creation, via the pencil icon)</span>
+              <button onClick={startChallenge} disabled={submitting} style={{ background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "8px 14px", cursor: submitting ? "default" : "pointer", fontSize: 13, opacity: submitting ? 0.7 : 1 }}>{submitting ? "Starting…" : "Start Challenge"}</button>
+              <button onClick={() => { setComposing(false); setFormError(""); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "8px 10px", cursor: "pointer" }}><X size={14} /></button>
+            </div>
+            {formError && <div style={{ fontSize: 12, color: STYLES.wax, marginTop: 8 }}>{formError}</div>}
           </div>
         ) : (
-          <button onClick={() => setComposing(true)} style={{ width: "100%", background: "#fff", border: `1px dashed ${STYLES.brass}`, borderRadius: 6, padding: "14px", cursor: "pointer", color: STYLES.slate, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+          <button onClick={() => { setComposing(true); setFormError(""); }} style={{ width: "100%", background: "#fff", border: `1px dashed ${STYLES.brass}`, borderRadius: 6, padding: "14px", cursor: "pointer", color: STYLES.slate, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}>
             <Dumbbell size={16} /> Start a RAPTR Gym challenge
           </button>
         )}
@@ -118,81 +157,129 @@ export default function GymSection({ currentUser, users }) {
         {challenges.length === 0 ? (
           <EmptyMsg>No challenges yet — start one above.</EmptyMsg>
         ) : (
-          challenges.map((c) => {
-            const isEditing = editingId === c.id;
-            const weeks = totalWeeks(c.startDate, c.endDate);
-            const today = todayStr();
-            const currentWeek = Math.min(weeks - 1, Math.max(0, weekIndexForDate(c.startDate, today)));
-            const isActive = today >= c.startDate && today <= c.endDate;
+          <>
+            {activeChallenges.length === 0 ? (
+              <EmptyMsg>No active challenges — start one above, or restore one from the archive below.</EmptyMsg>
+            ) : (
+              activeChallenges.map((c) => {
+                const isEditing = editingId === c.id;
+                const weeks = totalWeeks(c.startDate, c.endDate);
+                const today = todayStr();
+                const currentWeek = Math.min(weeks - 1, Math.max(0, weekIndexForDate(c.startDate, today)));
+                const isActive = today >= c.startDate && today <= c.endDate;
+                const hasEnded = today > c.endDate;
 
-            return (
-              <div key={c.id} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 8, padding: 18, marginBottom: 18 }}>
-                {isEditing ? (
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
-                      <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
-                        Start <input type="date" value={editDraft.startDate} onChange={(e) => setEditDraft({ ...editDraft, startDate: e.target.value })} style={selectStyle()} />
-                      </label>
-                      <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
-                        End <input type="date" value={editDraft.endDate} onChange={(e) => setEditDraft({ ...editDraft, endDate: e.target.value })} style={selectStyle()} />
-                      </label>
-                      <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
-                        Workouts/week <input type="number" min={1} max={14} value={editDraft.targetWorkoutsPerWeek} onChange={(e) => setEditDraft({ ...editDraft, targetWorkoutsPerWeek: e.target.value })} style={{ ...selectStyle(), width: 56 }} />
-                      </label>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
-                      {users.map((u) => (
-                        <div key={u} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <strong style={{ fontSize: 13, color: PARTICIPANT_COLOR[u] || STYLES.ink }}>{u}</strong>
-                          <label style={{ fontSize: 12, color: STYLES.slate, display: "flex", alignItems: "center", gap: 4 }}>
-                            Start wt <input type="number" value={editDraft.weights[u].startingWeight} onChange={(e) => setEditDraft({ ...editDraft, weights: { ...editDraft.weights, [u]: { ...editDraft.weights[u], startingWeight: e.target.value } } })} style={{ ...selectStyle(), width: 64 }} />
+                return (
+                  <div key={c.id} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 8, padding: 18, marginBottom: 18 }}>
+                    {isEditing ? (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
+                          <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
+                            Start <input type="date" value={editDraft.startDate} onChange={(e) => setEditDraft({ ...editDraft, startDate: e.target.value })} style={selectStyle()} />
                           </label>
-                          <label style={{ fontSize: 12, color: STYLES.slate, display: "flex", alignItems: "center", gap: 4 }}>
-                            Target wt <input type="number" value={editDraft.weights[u].targetWeight} onChange={(e) => setEditDraft({ ...editDraft, weights: { ...editDraft.weights, [u]: { ...editDraft.weights[u], targetWeight: e.target.value } } })} style={{ ...selectStyle(), width: 64 }} />
+                          <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
+                            End <input type="date" value={editDraft.endDate} min={editDraft.startDate} onChange={(e) => setEditDraft({ ...editDraft, endDate: e.target.value })} style={selectStyle()} />
+                          </label>
+                          <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 6 }}>
+                            Workouts/week <input type="number" min={1} max={14} value={editDraft.targetWorkoutsPerWeek} onChange={(e) => setEditDraft({ ...editDraft, targetWorkoutsPerWeek: e.target.value })} style={{ ...selectStyle(), width: 56 }} />
                           </label>
                         </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
+                          {users.map((u) => (
+                            <div key={u} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <strong style={{ fontSize: 13, color: PARTICIPANT_COLOR[u] || STYLES.ink }}>{u}</strong>
+                              <label style={{ fontSize: 12, color: STYLES.slate, display: "flex", alignItems: "center", gap: 4 }}>
+                                Start wt <input type="number" value={editDraft.weights[u].startingWeight} onChange={(e) => setEditDraft({ ...editDraft, weights: { ...editDraft.weights, [u]: { ...editDraft.weights[u], startingWeight: e.target.value } } })} style={{ ...selectStyle(), width: 64 }} />
+                              </label>
+                              <label style={{ fontSize: 12, color: STYLES.slate, display: "flex", alignItems: "center", gap: 4 }}>
+                                Target wt <input type="number" value={editDraft.weights[u].targetWeight} onChange={(e) => setEditDraft({ ...editDraft, weights: { ...editDraft.weights, [u]: { ...editDraft.weights[u], targetWeight: e.target.value } } })} style={{ ...selectStyle(), width: 64 }} />
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => saveEditChallenge(c.id, c)} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 13 }}><Save size={13} /> Save</button>
+                          <button onClick={() => { setEditingId(null); setEditDraft(null); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "7px 10px", cursor: "pointer" }}><X size={13} /></button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+                        <Dumbbell size={18} color={STYLES.brass} />
+                        <span style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700 }}>{c.startDate} → {c.endDate}</span>
+                        <span style={{ fontSize: 12, color: STYLES.slate }}>{c.targetWorkoutsPerWeek}x/week goal · Week {currentWeek + 1} of {weeks}</span>
+                        {!isActive && <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>{today < c.startDate ? "Upcoming" : "Ended"}</span>}
+                        {users.map((u) => {
+                          const p = normalizeParticipant(c.participants[u], c);
+                          return (
+                            <span key={u} style={{ fontSize: 12, color: PARTICIPANT_COLOR[u] || STYLES.slate }}>
+                              {u}: {p.startingWeight ?? "—"}→{p.targetWeight ?? "—"}
+                            </span>
+                          );
+                        })}
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                          {hasEnded && (
+                            <button onClick={() => setArchived(c.id, true)} title="Archive this challenge" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><Archive size={15} /></button>
+                          )}
+                          <button onClick={() => startEditChallenge(c)} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><Pencil size={15} /></button>
+                          <button onClick={() => deleteChallenge(c.id)} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><Trash2 size={15} /></button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className={users.length > 1 ? "gym-participants" : ""} style={users.length > 1 ? undefined : { display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+                      {users.map((u) => (
+                        <ParticipantPanel key={u} challenge={c} user={u} currentWeek={currentWeek} onLogWeighIn={(dateStr, weight) => logWeighIn(c, u, dateStr, weight)} onSetWorkout={(dateStr, type) => setWorkout(c, u, dateStr, type)} />
                       ))}
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => saveEditChallenge(c.id, c)} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 13 }}><Save size={13} /> Save</button>
-                      <button onClick={() => { setEditingId(null); setEditDraft(null); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "7px 10px", cursor: "pointer" }}><X size={13} /></button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-                    <Dumbbell size={18} color={STYLES.brass} />
-                    <span style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700 }}>{c.startDate} → {c.endDate}</span>
-                    <span style={{ fontSize: 12, color: STYLES.slate }}>{c.targetWorkoutsPerWeek}x/week goal · Week {currentWeek + 1} of {weeks}</span>
-                    {!isActive && <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>{today < c.startDate ? "Upcoming" : "Ended"}</span>}
-                    {users.map((u) => {
-                      const p = normalizeParticipant(c.participants[u], c);
-                      return (
-                        <span key={u} style={{ fontSize: 12, color: PARTICIPANT_COLOR[u] || STYLES.slate }}>
-                          {u}: {p.startingWeight ?? "—"}→{p.targetWeight ?? "—"}
-                        </span>
-                      );
-                    })}
-                    <button onClick={() => startEditChallenge(c)} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><Pencil size={15} /></button>
-                    <button onClick={() => deleteChallenge(c.id)} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><Trash2 size={15} /></button>
-                  </div>
-                )}
 
-                <div className={users.length > 1 ? "gym-participants" : ""} style={users.length > 1 ? undefined : { display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
-                  {users.map((u) => (
-                    <ParticipantPanel key={u} challenge={c} user={u} currentWeek={currentWeek} onLogWeighIn={(dateStr, weight) => logWeighIn(c, u, dateStr, weight)} onSetWorkout={(dateStr, type) => setWorkout(c, u, dateStr, type)} />
-                  ))}
+                    <Suspense fallback={<div style={{ fontSize: 12, color: STYLES.slate, marginTop: 14 }}>Loading chart…</div>}>
+                      <WeightChart challenge={c} users={users} />
+                    </Suspense>
+                  </div>
+                );
+              })
+            )}
+
+            {archivedChallenges.length > 0 && (
+              <div style={{ marginTop: 28 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: STYLES.slate, marginBottom: 10 }}>
+                  Archived challenges ({archivedChallenges.length})
                 </div>
-
-                <Suspense fallback={<div style={{ fontSize: 12, color: STYLES.slate, marginTop: 14 }}>Loading chart…</div>}>
-                  <WeightChart challenge={c} users={users} />
-                </Suspense>
+                {archivedChallenges.map((c) => {
+                  const isOpen = expandedArchived.has(c.id);
+                  return (
+                    <div key={c.id} style={{ background: "#fff", border: `1px solid ${STYLES.ink}18`, borderRadius: 8, padding: 14, marginBottom: 10, opacity: 0.85 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <Dumbbell size={16} color={STYLES.slate} />
+                        <span style={{ fontFamily: "Georgia, serif", fontSize: 15, fontWeight: 700, color: STYLES.slate }}>{c.startDate} → {c.endDate}</span>
+                        <span style={{ fontSize: 12, color: STYLES.slate }}>{c.targetWorkoutsPerWeek}x/week goal</span>
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
+                          <button onClick={() => toggleArchivedExpand(c.id)} title={isOpen ? "Hide summary" : "Show summary chart"} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+                            {isOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />} {isOpen ? "Hide" : "Summary"}
+                          </button>
+                          <button onClick={() => setArchived(c.id, false)} title="Restore this challenge" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><RotateCcw size={15} /></button>
+                          <button onClick={() => deleteChallenge(c.id)} title="Delete permanently" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate }}><Trash2 size={15} /></button>
+                        </div>
+                      </div>
+                      {isOpen && (
+                        <Suspense fallback={<div style={{ fontSize: 12, color: STYLES.slate, marginTop: 14 }}>Loading chart…</div>}>
+                          <WeightChart challenge={c} users={users} />
+                        </Suspense>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })
+            )}
+          </>
         )}
       </main>
     </>
   );
+}
+
+function emptyParticipant() {
+  return { startingWeight: null, targetWeight: null, weighIns: [], workouts: [] };
 }
 
 function ParticipantPanel({ challenge, user, currentWeek, onLogWeighIn, onSetWorkout }) {
@@ -201,6 +288,7 @@ function ParticipantPanel({ challenge, user, currentWeek, onLogWeighIn, onSetWor
   const today = todayStr();
   const target = targetForDate(p, challenge, today);
   const todaysWeighIn = p.weighIns.find((w) => w.date === today);
+  const canLogToday = today >= challenge.startDate && today <= challenge.endDate;
 
   const weekStart = addDays(challenge.startDate, currentWeek * 7);
   const days = [];
@@ -224,10 +312,16 @@ function ParticipantPanel({ challenge, user, currentWeek, onLogWeighIn, onSetWor
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
-        <input type="number" placeholder={todaysWeighIn ? String(todaysWeighIn.weight) : "Log today's weight"} value={weighInput} onChange={(e) => setWeighInput(e.target.value)} style={{ ...selectStyle(), flex: 1 }} />
-        <button onClick={() => { if (weighInput !== "") { onLogWeighIn(today, Number(weighInput)); setWeighInput(""); } }} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}>Log</button>
-      </div>
+      {canLogToday ? (
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
+          <input type="number" placeholder={todaysWeighIn ? String(todaysWeighIn.weight) : "Log today's weight"} value={weighInput} onChange={(e) => setWeighInput(e.target.value)} style={{ ...selectStyle(), flex: 1 }} />
+          <button onClick={() => { if (weighInput !== "") { onLogWeighIn(today, Number(weighInput)); setWeighInput(""); } }} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}>Log</button>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: STYLES.slate, fontStyle: "italic", marginBottom: 10 }}>
+          {today < challenge.startDate ? `Weigh-ins open once the challenge starts on ${challenge.startDate}.` : `This challenge ended ${challenge.endDate} — no more weigh-ins can be logged.`}
+        </div>
+      )}
 
       {recentWeighIns.length > 0 && (
         <div style={{ marginBottom: 10 }}>
@@ -266,4 +360,3 @@ function ParticipantPanel({ challenge, user, currentWeek, onLogWeighIn, onSetWor
     </div>
   );
 }
-

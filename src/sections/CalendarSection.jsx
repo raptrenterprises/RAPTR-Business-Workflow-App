@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Save, X, CalendarDays, ClipboardList, MessageSquare, SlidersHorizontal, Repeat } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Save, X, CalendarDays, ClipboardList, MessageSquare, SlidersHorizontal, Repeat, Paperclip } from "lucide-react";
 import {
   STYLES, uid, todayStr, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, toStr,
   importanceColor, urgencyColor, selectStyle, EVENT_CATEGORIES, EVENT_CATEGORY_COLOR, effectiveUrgency,
   eventCoversDay, EVENT_RECURRENCE_OPTIONS, TIME_ZONE, formatClockTime,
 } from "../constants";
 import { Badge, CenterMsg, ErrorBar } from "../components/Shared";
+import { AttachmentManager } from "../components/Attachments";
+import { deleteAttachment } from "../lib/storageApi";
 import { fetchEvents, insertEvent, updateEvent, deleteEventRow, subscribeEvents } from "../lib/eventsApi";
 import { fetchTasks, subscribeTasks } from "../lib/tasksApi";
 import { fetchThreads, subscribeThreads } from "../lib/threadsApi";
@@ -33,7 +35,7 @@ function eventLabel(e) {
   return `${formatClockTime(e.time)} ${e.title}`;
 }
 
-const emptyDraft = (date) => ({ title: "", description: "", category: "Other", date, endDate: date, time: "", allDay: true, recurrence: "none", recurrenceEnd: "" });
+const emptyDraft = (date) => ({ id: uid(), title: "", description: "", category: "Other", date, endDate: date, time: "", allDay: true, recurrence: "none", recurrenceEnd: "", attachments: [] });
 
 export default function CalendarSection({ currentUser, users }) {
   const [view, setView] = useState("week"); // "day" | "week" | "month"
@@ -111,15 +113,24 @@ export default function CalendarSection({ currentUser, users }) {
       time: draft.allDay ? null : draft.time || null, allDay: draft.allDay,
       recurrence: draft.recurrence || "none", recurrenceEnd: draft.recurrenceEnd || null,
       createdBy: currentUser, createdAt: new Date().toISOString(),
+      attachments: draft.attachments,
     };
+    const id = draft.id;
     setDraft(emptyDraft(draft.date));
     setComposing(false);
-    try { await insertEvent(ev); reloadEvents(); } catch (e) { setError("Couldn't add event: " + e.message); }
+    try { await insertEvent({ ...ev, id }); reloadEvents(); } catch (e) { setError("Couldn't add event: " + e.message); }
+  }
+
+  // Discards a not-yet-saved event draft, cleaning up any already-uploaded attachments.
+  async function cancelCompose() {
+    setComposing(false);
+    for (const a of draft.attachments) { try { await deleteAttachment(a.path); } catch { /* best effort */ } }
+    setDraft(emptyDraft(draft.date));
   }
 
   function startEditEvent(ev) {
     setEditingId(ev.id);
-    setEditDraft({ title: ev.title, description: ev.description || "", category: ev.category || "Other", date: ev.date, endDate: ev.endDate || ev.date, time: ev.time || "", allDay: ev.allDay, recurrence: ev.recurrence || "none", recurrenceEnd: ev.recurrenceEnd || "" });
+    setEditDraft({ title: ev.title, description: ev.description || "", category: ev.category || "Other", date: ev.date, endDate: ev.endDate || ev.date, time: ev.time || "", allDay: ev.allDay, recurrence: ev.recurrence || "none", recurrenceEnd: ev.recurrenceEnd || "", attachments: ev.attachments || [] });
   }
 
   async function saveEditEvent(id) {
@@ -131,9 +142,19 @@ export default function CalendarSection({ currentUser, users }) {
         date: editDraft.date, endDate: editDraft.endDate && editDraft.endDate >= editDraft.date ? editDraft.endDate : editDraft.date,
         time: editDraft.allDay ? null : editDraft.time || null, allDay: editDraft.allDay,
         recurrence: editDraft.recurrence || "none", recurrenceEnd: editDraft.recurrenceEnd || null,
+        attachments: editDraft.attachments,
       });
       setEditingId(null); setEditDraft(null); reloadEvents();
     } catch (e) { setError("Couldn't save event: " + e.message); }
+  }
+
+  // Attachments on an existing event persist immediately (independent of
+  // Save/Cancel on the rest of the form), so a file never gets orphaned
+  // in storage if the person adds it mid-edit and then cancels everything else.
+  async function persistEventAttachments(id, nextAttachments) {
+    setEditDraft((d) => (d && editingId === id ? { ...d, attachments: nextAttachments } : d));
+    setSelectedEvent((ev) => (ev && ev.id === id ? { ...ev, attachments: nextAttachments } : ev));
+    try { await updateEvent(id, { attachments: nextAttachments }); reloadEvents(); } catch (e) { setError("Couldn't update attachments: " + e.message); }
   }
 
   async function removeEvent(id) {
@@ -204,7 +225,7 @@ export default function CalendarSection({ currentUser, users }) {
           </div>
         </div>
 
-        {composing && <EventForm draft={draft} setDraft={setDraft} onSave={addEvent} onCancel={() => setComposing(false)} saveLabel="Add" />}
+        {composing && <EventForm draft={draft} setDraft={setDraft} onSave={addEvent} onCancel={cancelCompose} saveLabel="Add" currentUser={currentUser} />}
 
         {/* Category legend */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16, fontSize: 11 }}>
@@ -227,13 +248,15 @@ export default function CalendarSection({ currentUser, users }) {
             onCancelEdit={() => { setEditingId(null); setEditDraft(null); }}
             onRemoveEvent={removeEvent}
             onSelectEvent={setSelectedEvent}
+            currentUser={currentUser}
+            onPersistAttachments={persistEventAttachments}
           />
         )}
         {view === "week" && <WeekView refDate={refDate} dayItemsFor={dayItemsFor} weekBucket={weekBucket} onPick={setRefDate} setView={setView} onSelectEvent={setSelectedEvent} />}
         {view === "month" && <MonthView refDate={refDate} dayItemsFor={dayItemsFor} monthBucket={monthBucket} onPick={setRefDate} setView={setView} onSelectEvent={setSelectedEvent} />}
       </main>
 
-      <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onEdit={(ev) => { startEditEvent(ev); setView("day"); setRefDate(ev.date); }} />
+      <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onEdit={(ev) => { startEditEvent(ev); setView("day"); setRefDate(ev.date); }} currentUser={currentUser} onPersistAttachments={persistEventAttachments} />
     </>
   );
 }
@@ -242,11 +265,15 @@ function IconBtn({ onClick, children }) {
   return <button onClick={onClick} style={{ background: "#fff", border: `1px solid ${STYLES.ink}33`, borderRadius: 4, padding: 6, cursor: "pointer", display: "flex" }}>{children}</button>;
 }
 
-function EventForm({ draft, setDraft, onSave, onCancel, saveLabel }) {
+function EventForm({ draft, setDraft, onSave, onCancel, saveLabel, currentUser, onPersistAttachments, eventId }) {
+  const handleAttachmentsChange = onPersistAttachments
+    ? (next) => onPersistAttachments(eventId, next)
+    : (next) => setDraft({ ...draft, attachments: next });
   return (
     <div style={{ background: "#fff", border: `1px solid ${STYLES.brass}`, borderRadius: 6, padding: 14, marginBottom: 18, display: "flex", flexDirection: "column", gap: 10 }}>
       <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Event title…" style={{ padding: "8px 10px", borderRadius: 4, border: `1px solid ${STYLES.ink}33`, fontSize: 14 }} />
       <textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Description (optional)…" rows={2} style={{ padding: "8px 10px", borderRadius: 4, border: `1px solid ${STYLES.ink}33`, fontSize: 13, fontFamily: "inherit", resize: "vertical" }} />
+      <AttachmentManager folder={`events/${eventId || draft.id}`} attachments={draft.attachments || []} onChange={handleAttachmentsChange} uploadedBy={currentUser} compact />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
         <label style={{ fontSize: 13, color: STYLES.slate, display: "flex", alignItems: "center", gap: 5 }}>
           Category
@@ -342,7 +369,7 @@ function linkify(text) {
   });
 }
 
-function EventDetailModal({ event, onClose, onEdit }) {
+function EventDetailModal({ event, onClose, onEdit, currentUser, onPersistAttachments }) {
   if (!event) return null;
   const color = EVENT_CATEGORY_COLOR[event.category] || STYLES.brass;
   return (
@@ -374,6 +401,11 @@ function EventDetailModal({ event, onClose, onEdit }) {
           <div style={{ fontSize: 13, color: STYLES.slate, fontStyle: "italic", marginBottom: 18 }}>No description.</div>
         )}
 
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: STYLES.slate, marginBottom: 6 }}>Attachments</div>
+          <AttachmentManager folder={`events/${event.id}`} attachments={event.attachments || []} onChange={(next) => onPersistAttachments(event.id, next)} uploadedBy={currentUser} compact />
+        </div>
+
         <button onClick={() => { onEdit(event); onClose(); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}55`, color: STYLES.slate, borderRadius: 4, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
           <Pencil size={12} /> Edit
         </button>
@@ -381,7 +413,7 @@ function EventDetailModal({ event, onClose, onEdit }) {
     </div>
   );
 }
-function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStartEdit, onSaveEdit, onCancelEdit, onRemoveEvent, onSelectEvent }) {
+function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStartEdit, onSaveEdit, onCancelEdit, onRemoveEvent, onSelectEvent, currentUser, onPersistAttachments }) {
   const { events, tasks } = dayItemsFor(date);
   return (
     <div style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 18 }}>
@@ -392,7 +424,7 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
           {events.map((e) =>
             editingId === e.id ? (
-              <EventForm key={e.id} draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(e.id)} onCancel={onCancelEdit} saveLabel="Save" />
+              <EventForm key={e.id} draft={editDraft} setDraft={setEditDraft} onSave={() => onSaveEdit(e.id)} onCancel={onCancelEdit} saveLabel="Save" currentUser={currentUser} onPersistAttachments={onPersistAttachments} eventId={e.id} />
             ) : (
               <div key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 14, background: `${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}14`, borderLeft: `4px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}`, border: `1px solid ${EVENT_CATEGORY_COLOR[e.category] || STYLES.brass}55`, borderLeftWidth: 4, borderRadius: 4, padding: "8px 10px" }}>
                 <CalendarDays size={14} color={EVENT_CATEGORY_COLOR[e.category] || STYLES.brass} style={{ marginTop: 2, flexShrink: 0 }} />
@@ -408,6 +440,7 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
                   )}
                 </div>
                 {!e.allDay && e.time && <span style={{ fontSize: 12, color: STYLES.slate, flexShrink: 0 }}>{e.time}</span>}
+                {e.attachments && e.attachments.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, color: STYLES.slate, flexShrink: 0 }}><Paperclip size={11} /> {e.attachments.length}</span>}
                 <span style={{ fontSize: 10, color: EVENT_CATEGORY_COLOR[e.category] || STYLES.slate, fontWeight: 700, flexShrink: 0 }}>{e.category}</span>
                 <button onClick={() => onStartEdit(e)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Pencil size={13} /></button>
                 <button onClick={() => onRemoveEvent(e.id)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Trash2 size={13} /></button>

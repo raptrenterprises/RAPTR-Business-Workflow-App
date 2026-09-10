@@ -14,6 +14,7 @@ function fromRow(r) {
     createdAt: r.created_at,
     recurrence: r.recurrence || "none",
     recurrenceEnd: r.recurrence_end || null,
+    attachments: r.attachments || [],
   };
 }
 
@@ -37,6 +38,7 @@ export async function insertEvent(ev) {
     created_at: ev.createdAt,
     recurrence: ev.recurrence || "none",
     recurrence_end: ev.recurrenceEnd || null,
+    attachments: ev.attachments || [],
   });
   if (error) throw error;
 }
@@ -52,6 +54,7 @@ export async function updateEvent(id, patch) {
   if ("allDay" in patch) dbPatch.all_day = patch.allDay;
   if ("recurrence" in patch) dbPatch.recurrence = patch.recurrence;
   if ("recurrenceEnd" in patch) dbPatch.recurrence_end = patch.recurrenceEnd;
+  if ("attachments" in patch) dbPatch.attachments = patch.attachments;
   const { error } = await supabase.from("events").update(dbPatch).eq("id", id);
   if (error) throw error;
 }
