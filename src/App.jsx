@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell, LayoutDashboard } from "lucide-react";
+import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell, LayoutDashboard, PartyPopper } from "lucide-react";
 import { STYLES, USERS, USER_DIRECTORY } from "./constants";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./Login";
@@ -13,6 +13,7 @@ import TasksSection from "./sections/TasksSection";
 import ThreadsSection from "./sections/ThreadsSection";
 import CalendarSection from "./sections/CalendarSection";
 const GymSection = lazy(() => import("./sections/GymSection"));
+const RaptrMeetSection = lazy(() => import("./sections/raptrmeet/RaptrMeetSection"));
 
 export default function RaptrApp() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = signed out
@@ -71,6 +72,7 @@ export default function RaptrApp() {
           <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" showDot={hasUrgentTask} />
           <SectionButton active={section === "calendar"} onClick={() => setSection("calendar")} icon={<CalendarDays size={15} />} label="Calendar" showDot={hasEventNow} />
           <SectionButton active={section === "gym"} onClick={() => setSection("gym")} icon={<Dumbbell size={15} />} label="Gym" />
+          <SectionButton active={section === "raptrmeet"} onClick={() => setSection("raptrmeet")} icon={<PartyPopper size={15} />} label="RAPTRMeet" />
         </div>
       </header>
 
@@ -81,6 +83,11 @@ export default function RaptrApp() {
       {section === "gym" && (
         <Suspense fallback={<CenterMsg>Loading RAPTR Gym…</CenterMsg>}>
           <GymSection currentUser={currentUser} users={USERS} />
+        </Suspense>
+      )}
+      {section === "raptrmeet" && (
+        <Suspense fallback={<CenterMsg>Loading RAPTRMeet…</CenterMsg>}>
+          <RaptrMeetSection currentUser={currentUser} users={USERS} />
         </Suspense>
       )}
     </div>

@@ -13,6 +13,11 @@ function fromRow(r) {
     dueDate: r.due_date,
     recurrence: r.recurrence,
     attachments: r.attachments || [],
+    tags: r.tags || [],
+    raptrmeetId: r.raptrmeet_id || null,
+    raptrmeetOnly: r.raptrmeet_only || false,
+    raptrmeetDay: r.raptrmeet_day || null,
+    raptrmeetTimeblock: r.raptrmeet_timeblock || null,
   };
 }
 
@@ -38,6 +43,11 @@ export async function insertTask(task) {
     due_date: task.dueDate,
     recurrence: task.recurrence,
     attachments: task.attachments || [],
+    tags: task.tags || [],
+    raptrmeet_id: task.raptrmeetId || null,
+    raptrmeet_only: task.raptrmeetOnly || false,
+    raptrmeet_day: task.raptrmeetDay || null,
+    raptrmeet_timeblock: task.raptrmeetTimeblock || null,
   });
   if (error) throw error;
 }
@@ -52,6 +62,11 @@ export async function updateTask(id, patch) {
   if ("dueDate" in patch) dbPatch.due_date = patch.dueDate;
   if ("recurrence" in patch) dbPatch.recurrence = patch.recurrence;
   if ("attachments" in patch) dbPatch.attachments = patch.attachments;
+  if ("tags" in patch) dbPatch.tags = patch.tags;
+  if ("raptrmeetId" in patch) dbPatch.raptrmeet_id = patch.raptrmeetId;
+  if ("raptrmeetOnly" in patch) dbPatch.raptrmeet_only = patch.raptrmeetOnly;
+  if ("raptrmeetDay" in patch) dbPatch.raptrmeet_day = patch.raptrmeetDay;
+  if ("raptrmeetTimeblock" in patch) dbPatch.raptrmeet_timeblock = patch.raptrmeetTimeblock;
   const { error } = await supabase.from("tasks").update(dbPatch).eq("id", id);
   if (error) throw error;
 }

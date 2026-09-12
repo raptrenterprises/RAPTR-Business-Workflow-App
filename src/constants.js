@@ -79,6 +79,36 @@ export const RECURRENCE_OPTIONS = [
 
 export const WORKOUT_TYPES = ["Weights", "Barre", "Rowing", "Swimming", "Other Cardio", "Other Strength", "Other Flexibility", "Other"];
 
+// ---- RAPTRMeet ----
+export const TASK_TAGS = ["Business", "Social Media", "Mystery Creation", "Fun"];
+export const TASK_TAG_COLOR = {
+  "Business": STYLES.blue,
+  "Social Media": STYLES.purple,
+  "Mystery Creation": STYLES.rust,
+  "Fun": STYLES.green,
+};
+export const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack"];
+export const TIMEBLOCKS = [
+  { value: "morning", label: "Morning" },
+  { value: "afternoon", label: "Afternoon" },
+  { value: "evening", label: "Evening" },
+];
+export const TRAVEL_MODES = ["Driving", "Flying", "Train", "Other"];
+
+// Inclusive array of 'YYYY-MM-DD' date strings from startStr to endStr.
+export function dateRange(startStr, endStr) {
+  if (!startStr || !endStr) return [];
+  const out = [];
+  let cur = startStr;
+  let guard = 0;
+  while (cur <= endStr && guard < 60) { out.push(cur); cur = addDays(cur, 1); guard++; }
+  return out;
+}
+// True if two [aStart,aEnd] / [bStart,bEnd] inclusive date ranges overlap at all.
+export function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart <= bEnd && aEnd >= bStart;
+}
+
 export function uid() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   // Fallback for older browsers without crypto.randomUUID
