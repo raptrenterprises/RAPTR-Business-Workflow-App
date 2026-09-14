@@ -12,6 +12,139 @@ import { fetchRaptrMeets, subscribeRaptrMeets } from "../lib/raptrmeetsApi";
 
 const emptyTaskDraft = () => ({ id: uid(), title: "", importance: "Medium", urgency: "Medium", urgencyMode: "urgency", dueDate: "", recurrence: "none", owner: "shared", attachments: [], tags: [], raptrmeetOnly: false });
 
+function toggleTagIn(list, tag) {
+  return (list || []).includes(tag) ? list.filter((t) => t !== tag) : [...(list || []), tag];
+}
+
+// Hoisted to module scope (not defined inside TasksSection) so React keeps
+// the same component identity across re-renders. Previously this was a
+// nested function component, which meant React saw a brand-new component
+// type on every keystroke/click — it fully unmounted and remounted every
+// task row's DOM each time, which is why typing a single letter or tapping
+// a button reset scroll position and dropped focus.
+function TaskCard({
+  t, tab, users, currentUser,
+  isEditing, editDraft, setEditDraft, startEdit, saveEdit, cancelEdit,
+  toggleTask, deleteTask,
+  attachmentsOpenId, setAttachmentsOpenId, persistTaskAttachments,
+  meetMenuOpenId, setMeetMenuOpenId, assignToMeet, upcomingMeets, meetById,
+}) {
+  const overdue = t.dueDate && !t.completed && t.dueDate < todayStr();
+  const urg = effectiveUrgency(t);
+
+  if (isEditing) {
+    return (
+      <li style={{ background: "#fff", border: `1px solid ${STYLES.brass}`, borderRadius: 4, padding: 14 }}>
+        <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 4, border: `1px solid ${STYLES.ink}33`, fontSize: 15, marginBottom: 10 }} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
+            For
+            <select value={editDraft.owner} onChange={(e) => setEditDraft({ ...editDraft, owner: e.target.value })} style={selectStyle()}>
+              <option value="shared">Shared</option>
+              {users.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </label>
+          <UrgencyOrDueDateField
+            mode={editDraft.urgencyMode} setMode={(m) => setEditDraft({ ...editDraft, urgencyMode: m })}
+            urgency={editDraft.urgency} setUrgency={(v) => setEditDraft({ ...editDraft, urgency: v })}
+            dueDate={editDraft.dueDate} setDueDate={(v) => setEditDraft({ ...editDraft, dueDate: v })}
+          />
+          <ImportanceSelect value={editDraft.importance} onChange={(v) => setEditDraft({ ...editDraft, importance: v })} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
+            Repeats
+            <select value={editDraft.recurrence} onChange={(e) => setEditDraft({ ...editDraft, recurrence: e.target.value })} style={selectStyle()}>
+              {RECURRENCE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
+            <input type="checkbox" checked={editDraft.raptrmeetOnly} onChange={(e) => setEditDraft({ ...editDraft, raptrmeetOnly: e.target.checked })} /> RAPTRMeet only (in person)
+          </label>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <button onClick={() => saveEdit(t.id)} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "8px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><Save size={14} /> Save</button>
+            <button onClick={cancelEdit} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "8px 10px", cursor: "pointer" }}><X size={14} /></button>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+          {TASK_TAGS.map((tag) => (
+            <button key={tag} onClick={() => setEditDraft({ ...editDraft, tags: toggleTagIn(editDraft.tags, tag) })} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: `1px solid ${TASK_TAG_COLOR[tag]}`, background: (editDraft.tags || []).includes(tag) ? TASK_TAG_COLOR[tag] : "#fff", color: (editDraft.tags || []).includes(tag) ? "#fff" : TASK_TAG_COLOR[tag], cursor: "pointer", fontWeight: 600 }}>{tag}</button>
+          ))}
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li style={{ display: "flex", flexDirection: "column", gap: 8, background: "#fff", border: `1px solid ${overdue ? STYLES.wax + "66" : STYLES.ink + "1a"}`, borderRadius: 4, padding: "12px 14px", opacity: t.completed ? 0.55 : 1 }}>
+      {/* Top row: checkbox + title (left) — urgency/importance badges (top-right) */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+          <button onClick={() => toggleTask(t.id)} aria-label={t.completed ? "Mark incomplete" : "Mark complete"} style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${t.completed ? STYLES.brass : STYLES.slate}`, background: t.completed ? STYLES.brass : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+            {t.completed && <Check size={13} color="#fff" />}
+          </button>
+          <span style={{ fontSize: 15, textDecoration: t.completed ? "line-through" : "none", overflowWrap: "anywhere" }}>{t.title}</span>
+          {tab === "all" && <span style={{ fontSize: 11, color: STYLES.ink, background: STYLES.brass + "33", padding: "2px 8px", borderRadius: 10, fontWeight: 600, flexShrink: 0 }}>{t.owner === "shared" ? "Shared" : t.owner}</span>}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <Badge label={`U: ${urg}`} color={urgencyColor(urg)} />
+          <Badge label={`I: ${t.importance}`} color={importanceColor(t.importance)} />
+        </div>
+      </div>
+
+      {(t.tags && t.tags.length > 0) || t.raptrmeetOnly || t.raptrmeetId ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {(t.tags || []).map((tag) => <Badge key={tag} label={tag} color={TASK_TAG_COLOR[tag] || STYLES.slate} />)}
+          {t.raptrmeetOnly && <span style={{ fontSize: 11, color: STYLES.wax, background: STYLES.wax + "1a", padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>In-person only</span>}
+          {t.raptrmeetId && meetById[t.raptrmeetId] && (
+            <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10, display: "flex", alignItems: "center", gap: 3 }}>
+              <PartyPopper size={11} /> {meetById[t.raptrmeetId].title}
+            </span>
+          )}
+        </div>
+      ) : null}
+
+      {/* Bottom row: due date + recurrence + added-by (left) — edit/delete (bottom-right) */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {t.dueDate && (
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: overdue ? "#fff" : STYLES.slate, background: overdue ? STYLES.wax : STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>
+              <CalendarDays size={11} /> {overdue ? "Overdue " : ""}{t.dueDate}
+            </span>
+          )}
+          {t.recurrence && t.recurrence !== "none" && (
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>
+              <Repeat size={11} /> {t.recurrence}
+            </span>
+          )}
+          {t.createdBy !== t.owner && <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>added by {t.createdBy}</span>}
+          <AttachmentToggle count={(t.attachments || []).length} open={attachmentsOpenId === t.id} onClick={() => setAttachmentsOpenId((id) => (id === t.id ? null : t.id))} />
+        </div>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: "auto", position: "relative" }}>
+          {!t.completed && (
+            <button onClick={() => setMeetMenuOpenId((id) => (id === t.id ? null : t.id))} aria-label="Assign to RAPTRMeet" title="Assign to a RAPTRMeet" style={{ background: "transparent", border: "none", cursor: "pointer", color: t.raptrmeetId ? STYLES.wax : STYLES.slate, padding: 4 }}><Link2 size={15} /></button>
+          )}
+          <button onClick={() => startEdit(t)} aria-label="Edit task" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, padding: 4 }}><Pencil size={15} /></button>
+          <button onClick={() => deleteTask(t.id)} aria-label="Delete task" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, padding: 4 }}><Trash2 size={15} /></button>
+          {meetMenuOpenId === t.id && (
+            <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 20, background: "#fff", border: `1px solid ${STYLES.ink}33`, borderRadius: 4, marginTop: 4, boxShadow: "0 6px 18px rgba(0,0,0,0.15)", minWidth: 200 }}>
+              <button onClick={() => assignToMeet(t.id, null)} style={{ width: "100%", textAlign: "left", background: !t.raptrmeetId ? STYLES.brass + "33" : "transparent", border: "none", padding: "8px 10px", cursor: "pointer", fontSize: 12.5 }}>None</button>
+              {upcomingMeets.length === 0 ? (
+                <div style={{ padding: "8px 10px", fontSize: 12, color: STYLES.slate }}>No upcoming RAPTRMeets yet.</div>
+              ) : upcomingMeets.map((m) => (
+                <button key={m.id} onClick={() => assignToMeet(t.id, m.id)} style={{ width: "100%", textAlign: "left", background: t.raptrmeetId === m.id ? STYLES.brass + "33" : "transparent", border: "none", padding: "8px 10px", cursor: "pointer", fontSize: 12.5 }}>{m.title}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {attachmentsOpenId === t.id && (
+        <div style={{ borderTop: `1px solid ${STYLES.ink}14`, paddingTop: 8 }}>
+          <AttachmentManager folder={`tasks/${t.id}`} attachments={t.attachments || []} onChange={(next) => persistTaskAttachments(t.id, next)} uploadedBy={currentUser} compact />
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default function TasksSection({ currentUser, users }) {
   const [tasks, setTasks] = useState([]);
   const [raptrmeets, setRaptrmeets] = useState([]);
@@ -47,10 +180,6 @@ export default function TasksSection({ currentUser, users }) {
 
   const upcomingMeets = useMemo(() => raptrmeets.filter((m) => m.status !== "completed").sort((a, b) => (a.startDate < b.startDate ? -1 : 1)), [raptrmeets]);
   const meetById = useMemo(() => Object.fromEntries(raptrmeets.map((m) => [m.id, m])), [raptrmeets]);
-
-  function toggleDraftTag(setFn, current, tag) {
-    setFn((d) => ({ ...d, tags: (d.tags || []).includes(tag) ? d.tags.filter((t) => t !== tag) : [...(d.tags || []), tag] }));
-  }
 
   async function addTask() {
     const title = draft.title.trim();
@@ -122,6 +251,8 @@ export default function TasksSection({ currentUser, users }) {
     });
   }
 
+  function cancelEdit() { setEditingId(null); setEditDraft(null); }
+
   async function saveEdit(id) {
     const title = editDraft.title.trim();
     if (!title) return;
@@ -175,121 +306,13 @@ export default function TasksSection({ currentUser, users }) {
   const tabLabel = (t) => (t === "all" ? "All Tasks" : t === "shared" ? "Shared" : t);
   const tabIcon = (t) => (t === "all" ? <ListChecks size={15} /> : t === "shared" ? <Users size={15} /> : <User size={15} />);
 
-  function TaskCard({ t }) {
-    const isEditing = editingId === t.id;
-    const overdue = t.dueDate && !t.completed && t.dueDate < todayStr();
-    const urg = effectiveUrgency(t);
-    if (isEditing) {
-      return (
-        <li style={{ background: "#fff", border: `1px solid ${STYLES.brass}`, borderRadius: 4, padding: 14 }}>
-          <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 4, border: `1px solid ${STYLES.ink}33`, fontSize: 15, marginBottom: 10 }} />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
-              For
-              <select value={editDraft.owner} onChange={(e) => setEditDraft({ ...editDraft, owner: e.target.value })} style={selectStyle()}>
-                <option value="shared">Shared</option>
-                {users.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-            </label>
-            <UrgencyOrDueDateField
-              mode={editDraft.urgencyMode} setMode={(m) => setEditDraft({ ...editDraft, urgencyMode: m })}
-              urgency={editDraft.urgency} setUrgency={(v) => setEditDraft({ ...editDraft, urgency: v })}
-              dueDate={editDraft.dueDate} setDueDate={(v) => setEditDraft({ ...editDraft, dueDate: v })}
-            />
-            <ImportanceSelect value={editDraft.importance} onChange={(v) => setEditDraft({ ...editDraft, importance: v })} />
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
-              Repeats
-              <select value={editDraft.recurrence} onChange={(e) => setEditDraft({ ...editDraft, recurrence: e.target.value })} style={selectStyle()}>
-                {RECURRENCE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
-              <input type="checkbox" checked={editDraft.raptrmeetOnly} onChange={(e) => setEditDraft({ ...editDraft, raptrmeetOnly: e.target.checked })} /> RAPTRMeet only (in person)
-            </label>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              <button onClick={() => saveEdit(t.id)} style={{ background: STYLES.brass, border: "none", borderRadius: 4, padding: "8px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><Save size={14} /> Save</button>
-              <button onClick={() => { setEditingId(null); setEditDraft(null); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "8px 10px", cursor: "pointer" }}><X size={14} /></button>
-            </div>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-            {TASK_TAGS.map((tag) => (
-              <button key={tag} onClick={() => toggleDraftTag(setEditDraft, editDraft, tag)} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: `1px solid ${TASK_TAG_COLOR[tag]}`, background: (editDraft.tags || []).includes(tag) ? TASK_TAG_COLOR[tag] : "#fff", color: (editDraft.tags || []).includes(tag) ? "#fff" : TASK_TAG_COLOR[tag], cursor: "pointer", fontWeight: 600 }}>{tag}</button>
-            ))}
-          </div>
-        </li>
-      );
-    }
-    return (
-      <li style={{ display: "flex", flexDirection: "column", gap: 8, background: "#fff", border: `1px solid ${overdue ? STYLES.wax + "66" : STYLES.ink + "1a"}`, borderRadius: 4, padding: "12px 14px", opacity: t.completed ? 0.55 : 1 }}>
-        {/* Top row: checkbox + title (left) — urgency/importance badges (top-right) */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-            <button onClick={() => toggleTask(t.id)} aria-label={t.completed ? "Mark incomplete" : "Mark complete"} style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${t.completed ? STYLES.brass : STYLES.slate}`, background: t.completed ? STYLES.brass : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-              {t.completed && <Check size={13} color="#fff" />}
-            </button>
-            <span style={{ fontSize: 15, textDecoration: t.completed ? "line-through" : "none", overflowWrap: "anywhere" }}>{t.title}</span>
-            {tab === "all" && <span style={{ fontSize: 11, color: STYLES.ink, background: STYLES.brass + "33", padding: "2px 8px", borderRadius: 10, fontWeight: 600, flexShrink: 0 }}>{t.owner === "shared" ? "Shared" : t.owner}</span>}
-          </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <Badge label={`U: ${urg}`} color={urgencyColor(urg)} />
-            <Badge label={`I: ${t.importance}`} color={importanceColor(t.importance)} />
-          </div>
-        </div>
-
-        {(t.tags && t.tags.length > 0) || t.raptrmeetOnly || t.raptrmeetId ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-            {(t.tags || []).map((tag) => <Badge key={tag} label={tag} color={TASK_TAG_COLOR[tag] || STYLES.slate} />)}
-            {t.raptrmeetOnly && <span style={{ fontSize: 11, color: STYLES.wax, background: STYLES.wax + "1a", padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>In-person only</span>}
-            {t.raptrmeetId && meetById[t.raptrmeetId] && (
-              <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10, display: "flex", alignItems: "center", gap: 3 }}>
-                <PartyPopper size={11} /> {meetById[t.raptrmeetId].title}
-              </span>
-            )}
-          </div>
-        ) : null}
-
-        {/* Bottom row: due date + recurrence + added-by (left) — edit/delete (bottom-right) */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            {t.dueDate && (
-              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: overdue ? "#fff" : STYLES.slate, background: overdue ? STYLES.wax : STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>
-                <CalendarDays size={11} /> {overdue ? "Overdue " : ""}{t.dueDate}
-              </span>
-            )}
-            {t.recurrence && t.recurrence !== "none" && (
-              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>
-                <Repeat size={11} /> {t.recurrence}
-              </span>
-            )}
-            {t.createdBy !== t.owner && <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>added by {t.createdBy}</span>}
-            <AttachmentToggle count={(t.attachments || []).length} open={attachmentsOpenId === t.id} onClick={() => setAttachmentsOpenId((id) => (id === t.id ? null : t.id))} />
-          </div>
-          <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: "auto", position: "relative" }}>
-            {!t.completed && (
-              <button onClick={() => setMeetMenuOpenId((id) => (id === t.id ? null : t.id))} aria-label="Assign to RAPTRMeet" title="Assign to a RAPTRMeet" style={{ background: "transparent", border: "none", cursor: "pointer", color: t.raptrmeetId ? STYLES.wax : STYLES.slate, padding: 4 }}><Link2 size={15} /></button>
-            )}
-            <button onClick={() => startEdit(t)} aria-label="Edit task" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, padding: 4 }}><Pencil size={15} /></button>
-            <button onClick={() => deleteTask(t.id)} aria-label="Delete task" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, padding: 4 }}><Trash2 size={15} /></button>
-            {meetMenuOpenId === t.id && (
-              <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 20, background: "#fff", border: `1px solid ${STYLES.ink}33`, borderRadius: 4, marginTop: 4, boxShadow: "0 6px 18px rgba(0,0,0,0.15)", minWidth: 200 }}>
-                <button onClick={() => assignToMeet(t.id, null)} style={{ width: "100%", textAlign: "left", background: !t.raptrmeetId ? STYLES.brass + "33" : "transparent", border: "none", padding: "8px 10px", cursor: "pointer", fontSize: 12.5 }}>None</button>
-                {upcomingMeets.length === 0 ? (
-                  <div style={{ padding: "8px 10px", fontSize: 12, color: STYLES.slate }}>No upcoming RAPTRMeets yet.</div>
-                ) : upcomingMeets.map((m) => (
-                  <button key={m.id} onClick={() => assignToMeet(t.id, m.id)} style={{ width: "100%", textAlign: "left", background: t.raptrmeetId === m.id ? STYLES.brass + "33" : "transparent", border: "none", padding: "8px 10px", cursor: "pointer", fontSize: 12.5 }}>{m.title}</button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        {attachmentsOpenId === t.id && (
-          <div style={{ borderTop: `1px solid ${STYLES.ink}14`, paddingTop: 8 }}>
-            <AttachmentManager folder={`tasks/${t.id}`} attachments={t.attachments || []} onChange={(next) => persistTaskAttachments(t.id, next)} uploadedBy={currentUser} compact />
-          </div>
-        )}
-      </li>
-    );
-  }
+  const cardProps = {
+    tab, users, currentUser,
+    editDraft, setEditDraft, startEdit, saveEdit, cancelEdit,
+    toggleTask, deleteTask,
+    attachmentsOpenId, setAttachmentsOpenId, persistTaskAttachments,
+    meetMenuOpenId, setMeetMenuOpenId, assignToMeet, upcomingMeets, meetById,
+  };
 
   return (
     <>
@@ -336,7 +359,7 @@ export default function TasksSection({ currentUser, users }) {
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
               {TASK_TAGS.map((tag) => (
-                <button key={tag} onClick={() => toggleDraftTag(setDraft, draft, tag)} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: `1px solid ${TASK_TAG_COLOR[tag]}`, background: (draft.tags || []).includes(tag) ? TASK_TAG_COLOR[tag] : "#fff", color: (draft.tags || []).includes(tag) ? "#fff" : TASK_TAG_COLOR[tag], cursor: "pointer", fontWeight: 600 }}>{tag}</button>
+                <button key={tag} onClick={() => setDraft({ ...draft, tags: toggleTagIn(draft.tags, tag) })} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 12, border: `1px solid ${TASK_TAG_COLOR[tag]}`, background: (draft.tags || []).includes(tag) ? TASK_TAG_COLOR[tag] : "#fff", color: (draft.tags || []).includes(tag) ? "#fff" : TASK_TAG_COLOR[tag], cursor: "pointer", fontWeight: 600 }}>{tag}</button>
               ))}
             </div>
             <div style={{ marginTop: 10 }}>
@@ -363,7 +386,7 @@ export default function TasksSection({ currentUser, users }) {
           <EmptyMsg>No tasks match here yet.</EmptyMsg>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-            {mainList.map((t) => <TaskCard key={t.id} t={t} />)}
+            {mainList.map((t) => <TaskCard key={t.id} t={t} isEditing={editingId === t.id} {...cardProps} />)}
           </ul>
         )}
 
@@ -374,7 +397,7 @@ export default function TasksSection({ currentUser, users }) {
             </button>
             {showMeetTasks && (
               <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "flex", flexDirection: "column", gap: 8 }}>
-                {meetList.map((t) => <TaskCard key={t.id} t={t} />)}
+                {meetList.map((t) => <TaskCard key={t.id} t={t} isEditing={editingId === t.id} {...cardProps} />)}
               </ul>
             )}
           </div>
@@ -387,7 +410,7 @@ export default function TasksSection({ currentUser, users }) {
             </button>
             {showCompleted && (
               <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "flex", flexDirection: "column", gap: 8 }}>
-                {completedList.map((t) => <TaskCard key={t.id} t={t} />)}
+                {completedList.map((t) => <TaskCard key={t.id} t={t} isEditing={editingId === t.id} {...cardProps} />)}
               </ul>
             )}
           </div>

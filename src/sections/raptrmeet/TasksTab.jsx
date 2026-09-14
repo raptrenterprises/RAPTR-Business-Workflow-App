@@ -5,6 +5,30 @@ import { Badge } from "../../components/Shared";
 
 const emptyDraft = () => ({ title: "", owner: "shared", tags: [], raptrmeetOnly: true });
 
+// Hoisted to module scope so React keeps this component's identity across
+// re-renders instead of remounting every row (see TasksSection.jsx for why
+// that matters).
+function TaskRow({ t, onToggle, onUnassign, onRemove }) {
+  const style = { display: "flex", alignItems: "center", gap: 10, background: "#fff", border: `1px solid ${STYLES.ink}1a`, borderRadius: 4, padding: "10px 12px", opacity: t.completed ? 0.55 : 1 };
+  return (
+    <li style={style}>
+      <button onClick={() => onToggle(t)} aria-label="Toggle" style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${t.completed ? STYLES.brass : STYLES.slate}`, background: t.completed ? STYLES.brass : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+        {t.completed && <Check size={12} color="#fff" />}
+      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, textDecoration: t.completed ? "line-through" : "none", overflowWrap: "anywhere" }}>{t.title}</div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
+          <span style={{ fontSize: 10, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 7px", borderRadius: 10 }}>{t.owner === "shared" ? "Shared" : t.owner}</span>
+          {t.raptrmeetOnly && <span style={{ fontSize: 10, color: STYLES.wax, background: STYLES.wax + "1a", padding: "2px 7px", borderRadius: 10, fontWeight: 700 }}>In-person only</span>}
+          {(t.tags || []).map((tag) => <Badge key={tag} label={tag} color={TASK_TAG_COLOR[tag] || STYLES.slate} />)}
+        </div>
+      </div>
+      <button onClick={() => onUnassign(t)} title="Remove from this RAPTRMeet (stays on main Tasks list)" style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Unlink size={15} /></button>
+      <button onClick={() => onRemove(t)} title="Delete task" style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Trash2 size={15} /></button>
+    </li>
+  );
+}
+
 export default function TasksTab({ meet, allTasks, currentUser, users, onInsertTask, onUpdateTask, onDeleteTask, setError }) {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState(emptyDraft());
@@ -44,28 +68,6 @@ export default function TasksTab({ meet, allTasks, currentUser, users, onInsertT
   async function unassign(t) { try { await onUpdateTask(t.id, { raptrmeetId: null, raptrmeetDay: null, raptrmeetTimeblock: null }); } catch (e) { setError("Couldn't unassign task: " + e.message); } }
   async function assign(t) { try { await onUpdateTask(t.id, { raptrmeetId: meet.id }); setAssignPickerOpen(false); setAssignQuery(""); } catch (e) { setError("Couldn't assign task: " + e.message); } }
   async function remove(t) { try { await onDeleteTask(t.id); } catch (e) { setError("Couldn't delete task: " + e.message); } }
-
-  const rowStyle = (t) => ({ display: "flex", alignItems: "center", gap: 10, background: "#fff", border: `1px solid ${STYLES.ink}1a`, borderRadius: 4, padding: "10px 12px", opacity: t.completed ? 0.55 : 1 });
-
-  function TaskRow({ t }) {
-    return (
-      <li style={rowStyle(t)}>
-        <button onClick={() => toggle(t)} aria-label="Toggle" style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${t.completed ? STYLES.brass : STYLES.slate}`, background: t.completed ? STYLES.brass : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-          {t.completed && <Check size={12} color="#fff" />}
-        </button>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, textDecoration: t.completed ? "line-through" : "none", overflowWrap: "anywhere" }}>{t.title}</div>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
-            <span style={{ fontSize: 10, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 7px", borderRadius: 10 }}>{t.owner === "shared" ? "Shared" : t.owner}</span>
-            {t.raptrmeetOnly && <span style={{ fontSize: 10, color: STYLES.wax, background: STYLES.wax + "1a", padding: "2px 7px", borderRadius: 10, fontWeight: 700 }}>In-person only</span>}
-            {(t.tags || []).map((tag) => <Badge key={tag} label={tag} color={TASK_TAG_COLOR[tag] || STYLES.slate} />)}
-          </div>
-        </div>
-        <button onClick={() => unassign(t)} title="Remove from this RAPTRMeet (stays on main Tasks list)" style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Unlink size={15} /></button>
-        <button onClick={() => remove(t)} title="Delete task" style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Trash2 size={15} /></button>
-      </li>
-    );
-  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -134,7 +136,7 @@ export default function TasksTab({ meet, allTasks, currentUser, users, onInsertT
           <div style={{ fontSize: 13, color: STYLES.slate, padding: "8px 0" }}>Nothing yet.</div>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-            {open.map((t) => <TaskRow key={t.id} t={t} />)}
+            {open.map((t) => <TaskRow key={t.id} t={t} onToggle={toggle} onUnassign={unassign} onRemove={remove} />)}
           </ul>
         )}
       </div>
@@ -142,7 +144,7 @@ export default function TasksTab({ meet, allTasks, currentUser, users, onInsertT
         <div>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: STYLES.slate, marginBottom: 6 }}>Completed ({done.length})</div>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-            {done.map((t) => <TaskRow key={t.id} t={t} />)}
+            {done.map((t) => <TaskRow key={t.id} t={t} onToggle={toggle} onUnassign={unassign} onRemove={remove} />)}
           </ul>
         </div>
       )}

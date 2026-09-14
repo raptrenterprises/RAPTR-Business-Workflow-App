@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, Check, Sunrise, Sun, Moon, UtensilsCrossed } from "lucide-react";
-import { STYLES, todayStr, dateRange, eventCoversDay, formatET, formatClockTime, selectStyle, TIMEBLOCKS } from "../../constants";
+import { ChevronDown, ChevronRight, Check, Sunrise, Sun, Moon, UtensilsCrossed, CalendarClock, X } from "lucide-react";
+import { STYLES, todayStr, dateRange, eventCoversDay, formatET, formatClockTime, TIMEBLOCKS } from "../../constants";
 
 const BLOCK_ICON = { morning: <Sunrise size={14} />, afternoon: <Sun size={14} />, evening: <Moon size={14} /> };
 const MEAL_AFTER_BLOCK = { morning: "Breakfast", afternoon: "Lunch", evening: "Dinner" };
@@ -13,9 +13,45 @@ function timeBlockOfEvent(e) {
   return "evening";
 }
 
+// Two-column "pick a box" scheduler: day options on the left, time-of-day
+// options on the right. Hoisted to module scope so it keeps its identity
+// (and open/close state doesn't remount every parent re-render).
+function DayTimeblockPicker({ days, initialDay, initialBlock, onPick, onCancel }) {
+  const [day, setDay] = useState(initialDay || null);
+  const [block, setBlock] = useState(initialBlock || null);
+  const pill = (active) => ({
+    textAlign: "left", padding: "7px 10px", borderRadius: 4, border: `1px solid ${active ? STYLES.wax : STYLES.ink + "22"}`,
+    background: active ? STYLES.wax : "#fff", color: active ? "#fff" : STYLES.ink, fontWeight: active ? 700 : 400,
+    cursor: "pointer", fontSize: 12.5,
+  });
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${STYLES.brass}`, borderRadius: 6, padding: 10, marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, color: STYLES.slate, fontWeight: 700, marginBottom: 2 }}>Day</div>
+          {days.map((d) => (
+            <button key={d} onClick={() => setDay(d)} style={pill(day === d)}>{formatET(d + "T12:00:00", { weekday: "short", month: "short", day: "numeric" })}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, color: STYLES.slate, fontWeight: 700, marginBottom: 2 }}>Time of day</div>
+          {TIMEBLOCKS.map((b) => (
+            <button key={b.value} onClick={() => setBlock(b.value)} style={pill(block === b.value)}>{b.label}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+        <button onClick={onCancel} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer" }}><X size={13} /></button>
+        <button disabled={!day || !block} onClick={() => onPick(day, block)} style={{ background: day && block ? STYLES.wax : STYLES.slate, opacity: day && block ? 1 : 0.5, color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: day && block ? "pointer" : "default", fontSize: 12.5, fontWeight: 600 }}>Set</button>
+      </div>
+    </div>
+  );
+}
+
 export default function TimelineTab({ meet, tasks, events, currentUser, onUpdateTask, onUpdateMeet, setError }) {
   const days = dateRange(meet.startDate, meet.endDate);
   const [openDays, setOpenDays] = useState(() => new Set([days.includes(todayStr()) ? todayStr() : days[0]]));
+  const [pickerTaskId, setPickerTaskId] = useState(null);
 
   const meetTasks = useMemo(() => tasks.filter((t) => t.raptrmeetId === meet.id), [tasks, meet.id]);
   const unscheduled = meetTasks.filter((t) => !t.completed && !t.raptrmeetDay);
@@ -25,7 +61,7 @@ export default function TimelineTab({ meet, tasks, events, currentUser, onUpdate
   }
 
   async function scheduleTask(taskId, day, timeblock) {
-    try { await onUpdateTask(taskId, { raptrmeetDay: day || null, raptrmeetTimeblock: timeblock || null }); } catch (e) { setError("Couldn't schedule task: " + e.message); }
+    try { await onUpdateTask(taskId, { raptrmeetDay: day || null, raptrmeetTimeblock: timeblock || null }); setPickerTaskId(null); } catch (e) { setError("Couldn't schedule task: " + e.message); }
   }
   async function toggleTask(t) {
     try { await onUpdateTask(t.id, { completed: !t.completed }); } catch (e) { setError("Couldn't update task: " + e.message); }
@@ -42,14 +78,16 @@ export default function TimelineTab({ meet, tasks, events, currentUser, onUpdate
           <div style={{ fontSize: 12, fontWeight: 700, color: STYLES.ink, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>Unscheduled RAPTRMeet tasks — assign a day & time</div>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
             {unscheduled.map((t) => (
-              <li key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, background: STYLES.ink + "06", borderRadius: 4, padding: "6px 9px" }}>
-                <span style={{ flex: "1 1 140px" }}>{t.title}</span>
-                <select onChange={(e) => { const [d, b] = e.target.value.split("|"); if (d) scheduleTask(t.id, d, b); }} defaultValue="" style={selectStyle()}>
-                  <option value="" disabled>Schedule…</option>
-                  {days.map((d) => TIMEBLOCKS.map((b) => (
-                    <option key={`${d}|${b.value}`} value={`${d}|${b.value}`}>{formatET(d + "T12:00:00", { month: "short", day: "numeric" })} · {b.label}</option>
-                  )))}
-                </select>
+              <li key={t.id} style={{ background: STYLES.ink + "06", borderRadius: 4, padding: "6px 9px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13 }}>
+                  <span style={{ flex: "1 1 140px" }}>{t.title}</span>
+                  <button onClick={() => setPickerTaskId((id) => (id === t.id ? null : t.id))} style={{ background: "transparent", border: `1px solid ${STYLES.slate}`, color: STYLES.slate, borderRadius: 4, padding: "5px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                    <CalendarClock size={13} /> Schedule
+                  </button>
+                </div>
+                {pickerTaskId === t.id && (
+                  <DayTimeblockPicker days={days} onPick={(d, b) => scheduleTask(t.id, d, b)} onCancel={() => setPickerTaskId(null)} />
+                )}
               </li>
             ))}
           </ul>
