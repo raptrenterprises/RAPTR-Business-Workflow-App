@@ -77,7 +77,7 @@ export const RECURRENCE_OPTIONS = [
   { value: "monthly", label: "Monthly" },
 ];
 
-export const WORKOUT_TYPES = ["Weights", "Barre", "Rowing", "Swimming", "Other Cardio", "Other Strength", "Other Flexibility", "Other"];
+export const WORKOUT_TYPES = ["Weights", "Barre", "Rowing", "Running", "Swimming", "Other Cardio", "Other Strength", "Other Flexibility", "Other"];
 
 // ---- RAPTRMeet ----
 export const TASK_TAGS = ["Business", "Social Media", "Mystery Creation", "Fun"];
