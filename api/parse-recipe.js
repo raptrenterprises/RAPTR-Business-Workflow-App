@@ -5,6 +5,22 @@
 // page HTML so Google can show ratings/cook-time in search results. That
 // block already has structured ingredients/instructions/title — this just
 // reads it. No API key, no third-party service, no cost.
+//
+// Some sites block automated requests (bot-protection services often
+// fingerprint "no cookies / no JS / datacenter IP" requests and respond
+// with an odd status like 401/402/403/429/503, even for pages that have no
+// real paywall for a human visitor). When that happens, this falls back to
+// the Wayback Machine's archived copy, which is rarely blocked. If both
+// fail, the RAPTRMeet UI's recipe-clipper bookmarklet is the reliable
+// fallback since it runs in the person's own already-authenticated browser.
+
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Referer": "https://www.google.com/",
+};
+
 export default async function handler(req, res) {
   const url = req.query?.url;
   if (!url || typeof url !== "string") {
@@ -24,27 +40,57 @@ export default async function handler(req, res) {
     return;
   }
 
-  try {
-    const pageResp = await fetch(target.toString(), {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; RAPTROpsRecipeImport/1.0; +https://raptrmysteries.com)",
-        "Accept": "text/html",
-      },
-      redirect: "follow",
+  const direct = await tryFetchAndExtract(target.toString());
+  if (direct.recipe) {
+    res.status(200).json({ ...direct.recipe, sourceUrl: target.toString() });
+    return;
+  }
+
+  // Direct fetch failed or found nothing — try an archived copy.
+  const archived = await tryWaybackFallback(target.toString());
+  if (archived && archived.recipe) {
+    res.status(200).json({ ...archived.recipe, sourceUrl: target.toString() });
+    return;
+  }
+
+  const blocked = direct.status && [401, 402, 403, 429, 503].includes(direct.status);
+  if (direct.status && !direct.ok) {
+    res.status(502).json({
+      error: blocked
+        ? `This site blocked automated access (HTTP ${direct.status}). Try the recipe-clipper bookmarklet instead, or paste the ingredients.`
+        : `That page returned an error (HTTP ${direct.status}). Try the bookmarklet or paste the ingredients instead.`,
     });
-    if (!pageResp.ok) {
-      res.status(502).json({ error: `That page returned an error (HTTP ${pageResp.status}).` });
-      return;
-    }
-    const html = await pageResp.text();
+    return;
+  }
+  if (direct.error) {
+    res.status(500).json({ error: "Couldn't reach that page: " + direct.error });
+    return;
+  }
+  res.status(422).json({ error: "Couldn't find recipe data on that page — try the recipe-clipper bookmarklet or paste the ingredients instead." });
+}
+
+async function tryFetchAndExtract(url) {
+  try {
+    const resp = await fetch(url, { headers: BROWSER_HEADERS, redirect: "follow" });
+    if (!resp.ok) return { ok: false, status: resp.status };
+    const html = await resp.text();
     const recipe = extractRecipeFromHtml(html);
-    if (!recipe) {
-      res.status(422).json({ error: "Couldn't find recipe data on that page — try pasting the ingredients instead." });
-      return;
-    }
-    res.status(200).json({ ...recipe, sourceUrl: target.toString() });
+    return { ok: true, status: resp.status, recipe };
   } catch (e) {
-    res.status(500).json({ error: "Couldn't read that page: " + (e && e.message ? e.message : "unknown error") });
+    return { ok: false, error: e && e.message ? e.message : "unknown error" };
+  }
+}
+
+async function tryWaybackFallback(url) {
+  try {
+    const availResp = await fetch(`https://archive.org/wayback/available?url=${encodeURIComponent(url)}`);
+    if (!availResp.ok) return null;
+    const availData = await availResp.json();
+    const snapshotUrl = availData?.archived_snapshots?.closest?.url;
+    if (!snapshotUrl) return null;
+    return await tryFetchAndExtract(snapshotUrl);
+  } catch {
+    return null;
   }
 }
 

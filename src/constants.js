@@ -94,6 +94,7 @@ export const TIMEBLOCKS = [
   { value: "evening", label: "Evening" },
 ];
 export const TRAVEL_MODES = ["Driving", "Flying", "Train", "Other"];
+export const GROCERY_CATEGORIES = ["Produce", "Dairy & Eggs", "Meat & Seafood", "Bakery", "Pantry & Dry Goods", "Frozen", "Beverages", "Spices & Condiments", "Other"];
 
 // Inclusive array of 'YYYY-MM-DD' date strings from startStr to endStr.
 export function dateRange(startStr, endStr) {
