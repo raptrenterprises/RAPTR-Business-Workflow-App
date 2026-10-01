@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Save, X, CalendarDays, ClipboardList, MessageSquare, SlidersHorizontal, Repeat, Paperclip } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Save, X, CalendarDays, ClipboardList, MessageSquare, SlidersHorizontal, Repeat, Paperclip, Megaphone } from "lucide-react";
 import {
   STYLES, uid, todayStr, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, toStr,
   importanceColor, urgencyColor, selectStyle, EVENT_CATEGORIES, EVENT_CATEGORY_COLOR, effectiveUrgency,
@@ -37,7 +37,7 @@ function eventLabel(e) {
 
 const emptyDraft = (date) => ({ id: uid(), title: "", description: "", category: "Other", date, endDate: date, time: "", allDay: true, recurrence: "none", recurrenceEnd: "", attachments: [] });
 
-export default function CalendarSection({ currentUser, users }) {
+export default function CalendarSection({ currentUser, users, onOpenPost }) {
   const [view, setView] = useState("week"); // "day" | "week" | "month"
   const [refDate, setRefDate] = useState(todayStr());
   const [events, setEvents] = useState([]);
@@ -369,7 +369,7 @@ function linkify(text) {
   });
 }
 
-function EventDetailModal({ event, onClose, onEdit, currentUser, onPersistAttachments }) {
+function EventDetailModal({ event, onClose, onEdit, currentUser, onPersistAttachments, onOpenPost }) {
   if (!event) return null;
   const color = EVENT_CATEGORY_COLOR[event.category] || STYLES.brass;
   return (
@@ -406,9 +406,16 @@ function EventDetailModal({ event, onClose, onEdit, currentUser, onPersistAttach
           <AttachmentManager folder={`events/${event.id}`} attachments={event.attachments || []} onChange={(next) => onPersistAttachments(event.id, next)} uploadedBy={currentUser} compact />
         </div>
 
-        <button onClick={() => { onEdit(event); onClose(); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}55`, color: STYLES.slate, borderRadius: 4, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-          <Pencil size={12} /> Edit
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {event.postId && onOpenPost && (
+            <button onClick={() => { onOpenPost(event.postId); onClose(); }} style={{ background: STYLES.wax, border: "none", color: STYLES.parchment, borderRadius: 4, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700 }}>
+              <Megaphone size={12} /> Open post
+            </button>
+          )}
+          <button onClick={() => { onEdit(event); onClose(); }} style={{ background: "transparent", border: `1px solid ${STYLES.slate}55`, color: STYLES.slate, borderRadius: 4, padding: "7px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <Pencil size={12} /> Edit
+          </button>
+        </div>
       </div>
     </div>
   );

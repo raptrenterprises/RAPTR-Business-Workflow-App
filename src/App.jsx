@@ -20,6 +20,8 @@ export default function RaptrApp() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = signed out
   const [section, setSection] = useState("dashboard");
   const [profileOpen, setProfileOpen] = useState(false);
+  // A post to open in the Social section (from a task, a calendar event, or a ?post=<id> link).
+  const [openPostId, setOpenPostId] = useState(() => new URLSearchParams(window.location.search).get("post"));
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -46,6 +48,15 @@ export default function RaptrApp() {
   useEffect(() => {
     return () => clearAppBadge();
   }, []);
+
+  // A ?post=<id> link lands on the Social section; tidy the address bar afterwards.
+  useEffect(() => {
+    if (openPostId) {
+      setSection("social");
+      if (window.location.search.includes("post=")) window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [openPostId]);
+  const openPost = (id) => { setOpenPostId(id); setSection("social"); };
 
   if (session === undefined) return <CenterMsg>Loading…</CenterMsg>;
   if (!session) return <Login />;
@@ -79,9 +90,9 @@ export default function RaptrApp() {
       </header>
 
       {section === "dashboard" && <DashboardSection currentUser={currentUser} users={USERS} onNavigate={setSection} />}
-      {section === "tasks" && <TasksSection currentUser={currentUser} users={USERS} />}
+      {section === "tasks" && <TasksSection currentUser={currentUser} users={USERS} onOpenPost={openPost} />}
       {section === "threads" && <ThreadsSection currentUser={currentUser} users={USERS} />}
-      {section === "calendar" && <CalendarSection currentUser={currentUser} users={USERS} />}
+      {section === "calendar" && <CalendarSection currentUser={currentUser} users={USERS} onOpenPost={openPost} />}
       {section === "gym" && (
         <Suspense fallback={<CenterMsg>Loading RAPTR Gym…</CenterMsg>}>
           <GymSection currentUser={currentUser} users={USERS} />
@@ -94,7 +105,7 @@ export default function RaptrApp() {
       )}
       {section === "social" && (
         <Suspense fallback={<CenterMsg>Loading Social…</CenterMsg>}>
-          <SocialSection currentUser={currentUser} users={USERS} />
+          <SocialSection currentUser={currentUser} users={USERS} openPostId={openPostId} onOpenPostHandled={() => setOpenPostId(null)} />
         </Suspense>
       )}
     </div>

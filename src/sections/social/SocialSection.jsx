@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Images, CalendarRange, Layers, ListChecks } from "lucide-react";
 import { STYLES, uid } from "../../constants";
 import { TabButton, CenterMsg, ErrorBar } from "../../components/Shared";
 import { savePost, setPostStatus, setPostCampaign, deletePostRow, setShotCompleted, setShotMediaLinks, insertCampaign, updateCampaign, deleteCampaignRow } from "../../lib/postsApi";
-import { nextStatus } from "./socialConstants";
+import { isOnCalendarStatus } from "./socialConstants";
 import useSocialData from "./useSocialData";
 import MediaLibraryTab from "./MediaLibraryTab";
 import PlannerTab from "./PlannerTab";
@@ -19,18 +19,27 @@ const SUBTABS = [
   { key: "library", label: "Media Library", icon: <Images size={14} /> },
 ];
 
-export default function SocialSection({ currentUser }) {
+export default function SocialSection({ currentUser, openPostId, onOpenPostHandled }) {
   const [subtab, setSubtab] = useState("planner");
-  const { posts, shots, campaigns, media, shotMedia, loading, error, setError, reloadAll } = useSocialData();
+  const { posts, shots, units, campaigns, media, shotMedia, loading, error, setError, reloadAll } = useSocialData();
   const [postEditor, setPostEditor] = useState(null);       // null | { post: Post|null, defaults?: {campaignId}, notice?: string }
   const [campaignEditor, setCampaignEditor] = useState(null); // null | "new" | Campaign
+
+  // Opened from a task, a calendar event, or a ?post= link: show that post's full details.
+  useEffect(() => {
+    if (!openPostId || loading) return;
+    const post = posts.find((p) => p.id === openPostId);
+    if (post) { setSubtab("planner"); setPostEditor({ post }); }
+    else setError("That post couldn't be found. It may have been deleted.");
+    onOpenPostHandled?.();
+  }, [openPostId, loading, posts, onOpenPostHandled, setError]);
 
   async function run(fn, failMsg) {
     try { await fn(); await reloadAll(); } catch (e) { setError(`${failMsg}: ${e.message}`); }
   }
 
-  async function handleSavePost(post, shotList, removedIds, isNew, originalLinks) {
-    await savePost(post, shotList, removedIds, isNew, originalLinks);
+  async function handleSavePost(post, postUnits, shotList, removed, isNew, originalLinks) {
+    await savePost(post, postUnits, shotList, removed, isNew, originalLinks);
     setPostEditor(null);
     reloadAll();
   }
@@ -39,12 +48,10 @@ export default function SocialSection({ currentUser }) {
     await run(() => deletePostRow(post.id), "Couldn't delete the post");
     setPostEditor(null);
   }
-  const handleAdvance = (post) => {
-    const next = nextStatus(post.postType, post.status);
-    if (!next) return;
-    if (next === "scheduled" && (!post.publishDate || !post.publishTime)) {
+  const handleAdvance = (post, next) => {
+    if (isOnCalendarStatus(next) && (!post.publishDate || !post.publishTime)) {
       // Scheduling puts the post on the calendar, so it needs a date and time first.
-      setPostEditor({ post, notice: `Add a publish date and time to "${post.title}" before scheduling it.` });
+      setPostEditor({ post, notice: `Add a publish date and time to "${post.title}" before moving it to ${next === "ready_to_post" ? "Ready to manually post" : "Scheduled"}.` });
       return;
     }
     run(() => setPostStatus(post.id, next), "Couldn't update the status");
@@ -81,7 +88,7 @@ export default function SocialSection({ currentUser }) {
         <PlannerTab posts={posts} shots={shots} campaigns={campaigns} onOpenPost={(post) => setPostEditor({ post })} onAdvance={handleAdvance} />
       )}
       {subtab === "shots" && !loading && (
-        <ShotListTab posts={posts} shots={shots} campaigns={campaigns} media={media} shotMedia={shotMedia} onOpenPost={(post) => setPostEditor({ post })} onToggleShot={handleToggleShot} onSetShotMedia={handleSetShotMedia} />
+        <ShotListTab posts={posts} shots={shots} units={units} campaigns={campaigns} media={media} shotMedia={shotMedia} onOpenPost={(post) => setPostEditor({ post })} onToggleShot={handleToggleShot} onSetShotMedia={handleSetShotMedia} />
       )}
       {subtab === "campaigns" && !loading && (
         <CampaignsTab campaigns={campaigns} posts={posts} onOpenCampaign={setCampaignEditor} onNewCampaign={() => setCampaignEditor("new")} />
@@ -95,6 +102,7 @@ export default function SocialSection({ currentUser }) {
           defaults={postEditor.defaults}
           notice={postEditor.notice}
           shots={postEditor.post ? shots.filter((s) => s.postId === postEditor.post.id) : []}
+          units={postEditor.post ? units.filter((u) => u.postId === postEditor.post.id) : []}
           shotMedia={shotMedia}
           media={media}
           campaigns={campaigns}

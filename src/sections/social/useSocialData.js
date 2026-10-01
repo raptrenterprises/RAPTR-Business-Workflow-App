@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { fetchPosts, fetchShotItems, fetchCampaigns, fetchShotMedia, subscribePosts, subscribeShotItems, subscribeCampaigns, subscribeShotMedia } from "../../lib/postsApi";
+import { fetchPosts, fetchShotItems, fetchCampaigns, fetchShotMedia, fetchUnits, subscribePosts, subscribeShotItems, subscribeCampaigns, subscribeShotMedia, subscribeUnits } from "../../lib/postsApi";
 import { fetchMedia, subscribeMedia } from "../../lib/mediaApi";
 
 // Loads posts, shot items, campaigns, the media library, and shot<->media links once
@@ -11,6 +11,7 @@ export default function useSocialData() {
   const [campaigns, setCampaigns] = useState([]);
   const [media, setMedia] = useState([]);
   const [shotMedia, setShotMedia] = useState([]);
+  const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -30,18 +31,23 @@ export default function useSocialData() {
     try { setShotMedia(await fetchShotMedia()); } catch (e) { setError("Couldn't load shot media links: " + e.message); }
   }, []);
 
+  const reloadUnits = useCallback(async () => {
+    try { setUnits(await fetchUnits()); } catch (e) { setError("Couldn't load slides and beats: " + e.message); }
+  }, []);
+
   useEffect(() => {
-    Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia()]).finally(() => setLoading(false));
+    Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits()]).finally(() => setLoading(false));
     const subs = [
       subscribePosts(reloadPosts),
       subscribeShotItems(() => { reloadShots(); reloadPosts(); }), // a finished shot list can move a post to "Filmed"
       subscribeCampaigns(reloadCampaigns),
       subscribeMedia(reloadMedia),
       subscribeShotMedia(() => { reloadShotMedia(); reloadShots(); reloadPosts(); }),
+      subscribeUnits(reloadUnits),
     ];
     return () => subs.forEach((u) => u());
-  }, [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia]);
+  }, [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits]);
 
-  const reloadAll = useCallback(() => Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia()]), [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia]);
-  return { posts, shots, campaigns, media, shotMedia, loading, error, setError, reloadAll };
+  const reloadAll = useCallback(() => Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits()]), [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits]);
+  return { posts, shots, units, campaigns, media, shotMedia, loading, error, setError, reloadAll };
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Check, Plus, Trash2, Users, User, X, Pencil, Save, Repeat, CalendarDays, ListChecks, SlidersHorizontal, ChevronDown, ChevronRight, PartyPopper, Link2 } from "lucide-react";
+import { Check, Plus, Trash2, Users, User, X, Pencil, Save, Repeat, CalendarDays, ListChecks, SlidersHorizontal, ChevronDown, ChevronRight, PartyPopper, Link2, Megaphone } from "lucide-react";
 import {
   STYLES, IMPORTANCE_WEIGHT, URGENCY_WEIGHT, RECURRENCE_OPTIONS, priorityRank, effectiveUrgency,
   uid, todayStr, advanceDate, importanceColor, urgencyColor, selectStyle, TASK_TAGS, TASK_TAG_COLOR,
@@ -27,7 +27,7 @@ function TaskCard({
   isEditing, editDraft, setEditDraft, startEdit, saveEdit, cancelEdit,
   toggleTask, deleteTask,
   attachmentsOpenId, setAttachmentsOpenId, persistTaskAttachments,
-  meetMenuOpenId, setMeetMenuOpenId, assignToMeet, upcomingMeets, meetById,
+  meetMenuOpenId, setMeetMenuOpenId, assignToMeet, upcomingMeets, meetById, onOpenPost,
 }) {
   const overdue = t.dueDate && !t.completed && t.dueDate < todayStr();
   const urg = effectiveUrgency(t);
@@ -116,6 +116,9 @@ function TaskCard({
             </span>
           )}
           {t.createdBy !== t.owner && <span style={{ fontSize: 11, color: STYLES.slate, background: STYLES.ink + "0d", padding: "2px 8px", borderRadius: 10 }}>added by {t.createdBy}</span>}
+          {t.postId && onOpenPost && (
+            <button onClick={() => onOpenPost(t.postId)} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: STYLES.wax, background: STYLES.wax + "14", border: `1px solid ${STYLES.wax}44`, padding: "2px 8px", borderRadius: 10, cursor: "pointer" }}><Megaphone size={11} /> Open post</button>
+          )}
           <AttachmentToggle count={(t.attachments || []).length} open={attachmentsOpenId === t.id} onClick={() => setAttachmentsOpenId((id) => (id === t.id ? null : t.id))} />
         </div>
         <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: "auto", position: "relative" }}>
@@ -145,7 +148,7 @@ function TaskCard({
   );
 }
 
-export default function TasksSection({ currentUser, users }) {
+export default function TasksSection({ currentUser, users, onOpenPost }) {
   const [tasks, setTasks] = useState([]);
   const [raptrmeets, setRaptrmeets] = useState([]);
   const [tab, setTab] = useState(currentUser);
@@ -311,7 +314,7 @@ export default function TasksSection({ currentUser, users }) {
     editDraft, setEditDraft, startEdit, saveEdit, cancelEdit,
     toggleTask, deleteTask,
     attachmentsOpenId, setAttachmentsOpenId, persistTaskAttachments,
-    meetMenuOpenId, setMeetMenuOpenId, assignToMeet, upcomingMeets, meetById,
+    meetMenuOpenId, setMeetMenuOpenId, assignToMeet, upcomingMeets, meetById, onOpenPost,
   };
 
   return (

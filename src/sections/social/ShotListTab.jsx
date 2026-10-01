@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Search, Copy, Check } from "lucide-react";
 import { STYLES, selectStyle, todayStr, addDays, formatClockTime } from "../../constants";
 import { EmptyMsg } from "../../components/Shared";
-import { MEDIA_PEOPLE, STATUS_LABEL, STATUS_COLOR, formatPostDate } from "./socialConstants";
+import { MEDIA_PEOPLE, STATUS_LABEL, STATUS_COLOR, UNIT_NOUN, typeConfig, formatPostDate } from "./socialConstants";
 import MediaPicker from "./MediaPicker";
 
 const FORMATS = [{ value: "photo", label: "Photo" }, { value: "video", label: "Video" }, { value: "either", label: "Either" }];
@@ -24,7 +24,7 @@ function Chip({ active, onClick, children, color }) {
   );
 }
 
-function ShotLine({ shot, post, linked, showPost, onToggle, onFind }) {
+function ShotLine({ shot, post, unitLabel, linked, showPost, onToggle, onFind }) {
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 12px", background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6 }}>
       <input type="checkbox" checked={shot.completed} onChange={(e) => onToggle(shot, e.target.checked)} aria-label="Shot done" style={{ width: 18, height: 18, marginTop: 2, flexShrink: 0, accentColor: STYLES.green }} />
@@ -34,6 +34,7 @@ function ShotLine({ shot, post, linked, showPost, onToggle, onFind }) {
           <span style={{ fontSize: 11, fontWeight: 600, color: STYLES.ink, border: `1px solid ${STYLES.ink}33`, borderRadius: 10, padding: "1px 7px" }}>{shot.mediaType === "photo" ? "Photo" : shot.mediaType === "video" ? "Video" : "Photo or video"}</span>
           {shot.people.map((p) => <span key={p} style={{ fontSize: 11, color: STYLES.blue, border: `1px solid ${STYLES.blue}55`, background: `${STYLES.blue}14`, borderRadius: 10, padding: "1px 7px" }}>{p}</span>)}
           {shot.tags.map((t) => <span key={t} style={{ fontSize: 11, color: STYLES.purple, border: `1px solid ${STYLES.purple}55`, background: `${STYLES.purple}14`, borderRadius: 10, padding: "1px 7px" }}>{t}</span>)}
+          {unitLabel && <span style={{ fontSize: 11, fontWeight: 600, color: STYLES.slate, border: `1px solid ${STYLES.ink}33`, borderRadius: 10, padding: "1px 7px" }}>{unitLabel}</span>}
           {showPost && <span style={{ fontSize: 11.5, color: STYLES.slate }}>· {post.title}</span>}
         </div>
         {linked.length > 0 && (
@@ -58,7 +59,7 @@ function sortPosts(a, b) {
   return `${a.publishDate} ${a.publishTime}` < `${b.publishDate} ${b.publishTime}` ? -1 : 1;
 }
 
-export default function ShotListTab({ posts, shots, campaigns, media, shotMedia, onOpenPost, onToggleShot, onSetShotMedia }) {
+export default function ShotListTab({ posts, shots, units = [], campaigns, media, shotMedia, onOpenPost, onToggleShot, onSetShotMedia }) {
   const [timeFrame, setTimeFrame] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -74,6 +75,18 @@ export default function ShotListTab({ posts, shots, campaigns, media, shotMedia,
   const [copied, setCopied] = useState(false);
 
   const postById = useMemo(() => Object.fromEntries(posts.map((p) => [p.id, p])), [posts]);
+  // "Slide 2" / "Beat 3" labels for shots that belong to a carousel slide or reel beat.
+  const unitLabelById = useMemo(() => {
+    const byPost = {};
+    units.forEach((u) => { (byPost[u.postId] = byPost[u.postId] || []).push(u); });
+    const labels = {};
+    Object.entries(byPost).forEach(([postId, list]) => {
+      const kind = typeConfig(postById[postId]?.postType).units;
+      if (!kind) return;
+      list.sort((a, b) => a.sortOrder - b.sortOrder).forEach((u, i) => { labels[u.id] = `${UNIT_NOUN[kind]} ${i + 1}`; });
+    });
+    return labels;
+  }, [units, postById]);
   const mediaById = useMemo(() => Object.fromEntries(media.map((m) => [m.id, m])), [media]);
   const linksByShot = useMemo(() => {
     const m = {};
@@ -239,7 +252,7 @@ export default function ShotListTab({ posts, shots, campaigns, media, shotMedia,
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {g.items.map((s) => (
-                    <ShotLine key={s.id} shot={s} post={postById[s.postId]} showPost={groupBy === "date"} linked={(linksByShot[s.id] || []).map((id) => mediaById[id]).filter(Boolean)} onToggle={onToggleShot} onFind={setPickerShot} />
+                    <ShotLine key={s.id} shot={s} post={postById[s.postId]} unitLabel={s.unitId ? unitLabelById[s.unitId] : ""} showPost={groupBy === "date"} linked={(linksByShot[s.id] || []).map((id) => mediaById[id]).filter(Boolean)} onToggle={onToggleShot} onFind={setPickerShot} />
                   ))}
                 </div>
               </div>

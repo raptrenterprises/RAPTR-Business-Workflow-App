@@ -15,6 +15,7 @@ function fromRow(r) {
     recurrence: r.recurrence || "none",
     recurrenceEnd: r.recurrence_end || null,
     attachments: r.attachments || [],
+    postId: r.post_id || null,
   };
 }
 

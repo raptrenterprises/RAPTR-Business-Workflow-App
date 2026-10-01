@@ -14,6 +14,7 @@ function fromRow(r) {
     recurrence: r.recurrence,
     attachments: r.attachments || [],
     tags: r.tags || [],
+    postId: r.post_id || null,
     raptrmeetId: r.raptrmeet_id || null,
     raptrmeetOnly: r.raptrmeet_only || false,
     raptrmeetDay: r.raptrmeet_day || null,

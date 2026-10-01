@@ -2,9 +2,9 @@ import { useState, useMemo } from "react";
 import { Plus, Search, ChevronRight, ChevronDown } from "lucide-react";
 import { STYLES, selectStyle, formatClockTime } from "../../constants";
 import { EmptyMsg } from "../../components/Shared";
-import { POST_TYPES, STATUS_LABEL, STATUS_COLOR, nextStatus, formatPostDate } from "./socialConstants";
+import { POST_TYPES, STATUS_LABEL, STATUS_COLOR, nextStatuses, formatPostDate } from "./socialConstants";
 
-const ALL_STATUSES = ["idea", "planned", "filmed", "drafted", "edited", "scheduled", "live"];
+const ALL_STATUSES = ["idea", "planned", "filmed", "drafted", "edited", "scheduled", "ready_to_post", "live"];
 
 function StatusPill({ status }) {
   const c = STATUS_COLOR[status] || STYLES.slate;
@@ -12,7 +12,7 @@ function StatusPill({ status }) {
 }
 
 function PostCard({ post, shotCount, shotDone, campaignName, onOpen, onAdvance }) {
-  const next = nextStatus(post.postType, post.status);
+  const nexts = nextStatuses(post.postType, post.status);
   const when = post.publishDate ? `${formatPostDate(post.publishDate)}${post.publishTime ? ` · ${formatClockTime(post.publishTime)}` : ""}` : "No date yet";
   return (
     <div onClick={() => onOpen(post)} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderLeft: `4px solid ${STATUS_COLOR[post.status] || STYLES.slate}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -26,11 +26,11 @@ function PostCard({ post, shotCount, shotDone, campaignName, onOpen, onAdvance }
         </div>
       </div>
       <StatusPill status={post.status} />
-      {next && (
-        <button onClick={(e) => { e.stopPropagation(); onAdvance(post); }} style={{ ...selectStyle(), cursor: "pointer", display: "flex", alignItems: "center", gap: 3, color: STATUS_COLOR[next], fontWeight: 600 }}>
-          {STATUS_LABEL[next]} <ChevronRight size={13} />
+      {nexts.map((n) => (
+        <button key={n} onClick={(e) => { e.stopPropagation(); onAdvance(post, n); }} style={{ ...selectStyle(), cursor: "pointer", display: "flex", alignItems: "center", gap: 3, color: STATUS_COLOR[n], fontWeight: 600 }}>
+          {STATUS_LABEL[n]} <ChevronRight size={13} />
         </button>
-      )}
+      ))}
     </div>
   );
 }
@@ -62,7 +62,7 @@ export default function PlannerTab({ posts, shots, campaigns, onOpenPost, onAdva
       if (typeFilter !== "all" && p.postType !== typeFilter) return false;
       if (campaignFilter === "none" ? p.campaignId : campaignFilter !== "all" && p.campaignId !== campaignFilter) return false;
       if (statusFilter.length > 0 && !statusFilter.includes(p.status)) return false;
-      if (q && !`${p.title} ${p.caption} ${p.notes} ${p.tags.join(" ")}`.toLowerCase().includes(q)) return false;
+      if (q && !`${p.title} ${p.description} ${p.caption} ${p.notes} ${p.tags.join(" ")}`.toLowerCase().includes(q)) return false;
       return true;
     }).sort(sortByDate);
   }, [posts, search, statusFilter, typeFilter, campaignFilter]);
