@@ -21,7 +21,7 @@ const SUBTABS = [
 
 export default function SocialSection({ currentUser, openPostId, onOpenPostHandled }) {
   const [subtab, setSubtab] = useState("planner");
-  const { posts, shots, units, campaigns, media, shotMedia, loading, error, setError, reloadAll } = useSocialData();
+  const { posts, shots, units, keywords, campaigns, media, shotMedia, loading, error, setError, reloadAll } = useSocialData();
   const [postEditor, setPostEditor] = useState(null);       // null | { post: Post|null, defaults?: {campaignId}, notice?: string }
   const [campaignEditor, setCampaignEditor] = useState(null); // null | "new" | Campaign
 
@@ -38,8 +38,8 @@ export default function SocialSection({ currentUser, openPostId, onOpenPostHandl
     try { await fn(); await reloadAll(); } catch (e) { setError(`${failMsg}: ${e.message}`); }
   }
 
-  async function handleSavePost(post, postUnits, shotList, removed, isNew, originalLinks) {
-    await savePost(post, postUnits, shotList, removed, isNew, originalLinks);
+  async function handleSavePost(post, postUnits, shotList, removed, isNew, originalLinks, extras) {
+    await savePost(post, postUnits, shotList, removed, isNew, originalLinks, extras);
     setPostEditor(null);
     reloadAll();
   }
@@ -103,6 +103,7 @@ export default function SocialSection({ currentUser, openPostId, onOpenPostHandl
           notice={postEditor.notice}
           shots={postEditor.post ? shots.filter((s) => s.postId === postEditor.post.id) : []}
           units={postEditor.post ? units.filter((u) => u.postId === postEditor.post.id) : []}
+          keywords={postEditor.post ? keywords.filter((k) => k.postId === postEditor.post.id) : []}
           shotMedia={shotMedia}
           media={media}
           campaigns={campaigns}

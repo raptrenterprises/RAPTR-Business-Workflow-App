@@ -3,7 +3,7 @@ import { X, Plus, Trash2, ChevronRight, ChevronUp, ChevronDown, Search, External
 import { STYLES, uid, selectStyle } from "../../constants";
 import MediaPicker from "./MediaPicker";
 import {
-  POST_TYPES, MEDIA_PEOPLE, SHOT_MEDIA_TYPES, STATUS_LABEL, STATUS_COLOR, SEEDER_FIELDS, UNIT_DEFAULT_COUNT, UNIT_NOUN,
+  POST_TYPES, MEDIA_PEOPLE, SHOT_MEDIA_TYPES, PIN_BOARDS, PIN_TOPICS, PIN_TOPICS_MAX, METRICS_BY_TYPE, createsCalendarEvent, STATUS_LABEL, STATUS_COLOR, SEEDER_FIELDS, UNIT_DEFAULT_COUNT, UNIT_NOUN,
   typeConfig, statusFlow, nextStatuses, normalizeStatus, isOnCalendarStatus, normalizeTag,
 } from "./socialConstants";
 
@@ -165,12 +165,135 @@ function UnitCard({ index, count, noun, kind, unit, onPatch, onMove, onRemove, c
   );
 }
 
+// Pinterest topics: pick from the list, or type a one-off topic for this pin only. Max 10.
+function TopicPicker({ selected, onChange }) {
+  const [custom, setCustom] = useState("");
+  const full = selected.length >= PIN_TOPICS_MAX;
+  const add = (t) => {
+    const topic = normalizeTag(t);
+    if (!topic || full || selected.includes(topic)) return;
+    onChange([...selected, topic]);
+  };
+  return (
+    <div>
+      {selected.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+          {selected.map((t) => (
+            <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: STYLES.purple, color: "#fff", borderRadius: 14, padding: "4px 6px 4px 12px", fontSize: 13 }}>
+              {t}
+              <button type="button" onClick={() => onChange(selected.filter((x) => x !== t))} aria-label={`Remove ${t}`} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <select value="" disabled={full} onChange={(e) => add(e.target.value)} style={{ ...inputStyle, flex: "1 1 180px", width: "auto" }}>
+          <option value="">{full ? "Maximum reached" : "Choose a topic…"}</option>
+          {PIN_TOPICS.filter((t) => !selected.includes(t)).map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <input value={custom} disabled={full} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(custom); setCustom(""); } }} placeholder="Or add a one-off topic" style={{ ...inputStyle, flex: "1 1 160px", width: "auto" }} />
+        <button type="button" disabled={full || !custom.trim()} onClick={() => { add(custom); setCustom(""); }} style={{ ...selectStyle(), cursor: "pointer" }}>Add</button>
+      </div>
+      <div style={{ fontSize: 11.5, color: STYLES.slate, marginTop: 3 }}>{selected.length}/{PIN_TOPICS_MAX} topics</div>
+    </div>
+  );
+}
+
+function PollFields({ draft, set }) {
+  const opts = draft.pollOptions;
+  const setOpt = (i, v) => set({ pollOptions: opts.map((o, j) => (j === i ? v : o)) });
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 10, marginBottom: 14 }}>
+      <Field label="Poll question"><input value={draft.pollQuestion} onChange={(e) => set({ pollQuestion: e.target.value })} style={inputStyle} placeholder="e.g. Who did it?" /></Field>
+      <label style={labelStyle}>Answer choices</label>
+      {opts.map((o, i) => (
+        <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+          <input value={o} onChange={(e) => setOpt(i, e.target.value)} style={inputStyle} placeholder={`Choice ${i + 1}`} />
+          <button type="button" onClick={() => set({ pollOptions: opts.filter((_, j) => j !== i) })} aria-label={`Remove choice ${i + 1}`} style={iconBtn}><Trash2 size={16} /></button>
+        </div>
+      ))}
+      <button type="button" onClick={() => set({ pollOptions: [...opts, ""] })} style={{ ...selectStyle(), cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13 }}><Plus size={14} /> Add choice</button>
+    </div>
+  );
+}
+
+function PollToggle({ draft, set }) {
+  return (
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: STYLES.ink, cursor: "pointer" }}>
+      <input type="checkbox" checked={draft.pollEnabled} onChange={(e) => set({ pollEnabled: e.target.checked, pollOptions: e.target.checked && draft.pollOptions.length === 0 ? ["", ""] : draft.pollOptions })} style={{ width: 16, height: 16, accentColor: STYLES.wax }} /> Poll
+    </label>
+  );
+}
+
+// Performance metrics: shown once a post is Live. Values are typed in by hand for now.
+function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
+  const cfg = METRICS_BY_TYPE[draft.postType];
+  if (!cfg) return null;
+  const setMetric = (key, value) => {
+    const next = { ...draft.metrics };
+    if (value === "") delete next[key];
+    else next[key] = Number(value);
+    set({ metrics: next });
+  };
+  const patchKw = (id, patch) => onKeywordsChange(keywords.map((k) => (k.id === id ? { ...k, ...patch } : k)));
+  const kwInput = { ...selectStyle(), width: "100%", boxSizing: "border-box", fontSize: 13, padding: "6px 8px" };
+  return (
+    <Section title="Performance metrics">
+      <Field label="Numbers as of">
+        <input type="date" value={draft.metricsUpdatedOn} onChange={(e) => set({ metricsUpdatedOn: e.target.value })} style={{ ...inputStyle, maxWidth: 200 }} />
+      </Field>
+      {cfg.groups.map((g) => (
+        <div key={g.title} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: STYLES.slate, marginBottom: 6 }}>{g.title}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 10 }}>
+            {g.fields.map((f) => (
+              <div key={f.key}>
+                <label style={labelStyle}>{f.label}</label>
+                <input type="number" step="any" value={draft.metrics[f.key] ?? ""} onChange={(e) => setMetric(f.key, e.target.value)} style={inputStyle} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {draft.pollEnabled && draft.postType !== "Blog post" && draft.postType !== "Pinterest pin" && (
+        <Field label="Poll results"><textarea value={draft.metrics.poll_results || ""} onChange={(e) => set({ metrics: { ...draft.metrics, poll_results: e.target.value } })} rows={2} style={textareaStyle} placeholder="e.g. Yes 62%, No 38%" /></Field>
+      )}
+      {cfg.keywords && (
+        <div>
+          <label style={labelStyle}>Google Search Console keywords (last 30 days)</label>
+          {keywords.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 2fr) repeat(4, minmax(60px, 1fr)) 24px", gap: 6, fontSize: 11.5, color: STYLES.slate, marginBottom: 4 }}>
+              <span>Keyword</span><span>Impressions</span><span>Clicks</span><span>Click rate %</span><span>Avg position</span><span />
+            </div>
+          )}
+          {keywords.map((k) => {
+            const auto = k.ctr === "" && Number(k.impressions) > 0 && k.clicks !== "" ? String(Math.round((Number(k.clicks) / Number(k.impressions)) * 10000) / 100) : "";
+            return (
+              <div key={k.id} style={{ display: "grid", gridTemplateColumns: "minmax(120px, 2fr) repeat(4, minmax(60px, 1fr)) 24px", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                <input value={k.keyword} onChange={(e) => patchKw(k.id, { keyword: e.target.value })} placeholder="keyword" style={kwInput} />
+                <input type="number" min="0" value={k.impressions} onChange={(e) => patchKw(k.id, { impressions: e.target.value })} style={kwInput} />
+                <input type="number" min="0" value={k.clicks} onChange={(e) => patchKw(k.id, { clicks: e.target.value })} style={kwInput} />
+                <input type="number" step="any" value={k.ctr} onChange={(e) => patchKw(k.id, { ctr: e.target.value })} placeholder={auto} style={kwInput} />
+                <input type="number" step="any" value={k.avgPosition} onChange={(e) => patchKw(k.id, { avgPosition: e.target.value })} style={kwInput} />
+                <button type="button" onClick={() => onKeywordsChange(keywords.filter((x) => x.id !== k.id), k.id)} aria-label="Remove keyword" style={iconBtn}><Trash2 size={15} /></button>
+              </div>
+            );
+          })}
+          <button type="button" onClick={() => onKeywordsChange([...keywords, { id: uid(), keyword: "", impressions: "", clicks: "", ctr: "", avgPosition: "" }])} style={{ ...selectStyle(), cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13 }}><Plus size={14} /> Add keyword</button>
+          <div style={{ fontSize: 11.5, color: STYLES.slate, marginTop: 4 }}>Leave click rate blank to have it worked out from clicks and impressions.</div>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 const blankUnit = () => ({ id: uid(), textOverlay: "", script: "", editingNotes: "", finalUrl: "" });
 const blankShot = (postId, unitId) => ({ id: uid(), postId, unitId: unitId || null, description: "", mediaType: "", people: [], tags: [], completed: false, mediaIds: [] });
 const blankPost = (campaignId) => ({
   id: uid(), title: "", postType: "Reel", status: "idea", publishDate: "", publishTime: "", description: "", caption: "", seederComments: "",
   seederRaptr: "", seederEvan: "", seederEvanReply: "", seederCathy: "", seederCathyReply: "", textOverlay: "", finalUrl: "",
-  blogText: "", sqsCategories: [], sqsTags: [], crossLinks: "", pinCategories: [], pinBoards: [], pinDescription: "", attachments: [],
+  blogText: "", sqsCategories: [], sqsTags: [], crossLinks: "", pinCategories: [], pinBoardPrimary: "", pinBoardsSecondary: [], pinDescription: "", pinTitle: "", pinLink: "", pinTopics: [], pinAltText: "",
+  musicAudio: "", pollEnabled: false, pollQuestion: "", pollOptions: [], metrics: {}, metricsUpdatedOn: "", attachments: [],
   notes: "", tags: [], campaignId: campaignId || "",
 });
 
@@ -194,7 +317,7 @@ const unitHasContent = (unit, shotList) =>
   [unit.textOverlay, unit.script, unit.editingNotes, unit.finalUrl].some((v) => v.trim()) || shotList.some((s) => s.unitId === unit.id && s.description.trim());
 const badUrl = (v) => v.trim() && !/^https?:\/\//i.test(v.trim());
 
-export default function PostForm({ post, defaults, notice, shots, units: savedUnits, shotMedia, media, campaigns, currentUser, onSave, onDelete, onClose }) {
+export default function PostForm({ post, defaults, notice, shots, units: savedUnits, keywords: savedKeywords, shotMedia, media, campaigns, currentUser, onSave, onDelete, onClose }) {
   const isNew = !post;
   const [originalLinks] = useState(() => {
     const m = {};
@@ -207,6 +330,9 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
     const s = shots.map((x) => ({ ...x, mediaIds: originalLinks[x.id] || [] }));
     return ensureStructure(post ? post.postType : "Reel", u, s, post ? post.id : "");
   });
+  const [keywords, setKeywords] = useState(() => savedKeywords.map((k) => ({ ...k })));
+  const [removedKeywordIds, setRemovedKeywordIds] = useState([]);
+  const origKeywordIds = new Set(savedKeywords.map((k) => k.id));
   const [removedUnitIds, setRemovedUnitIds] = useState([]);
   const [removedShotIds, setRemovedShotIds] = useState([]);
   const [pickerShotId, setPickerShotId] = useState(null);
@@ -264,7 +390,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
     if (!draft.title.trim()) { setError("Give this post a title."); return; }
     if (draft.publishTime && !draft.publishDate) { setError("Add a publish date to go with the time."); return; }
     if (isOnCalendarStatus(draft.status) && (!draft.publishDate || !draft.publishTime)) { setError("Add a publish date and time first. The post goes on the calendar at that time."); return; }
-    if ([draft.finalUrl, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
+    if ([draft.finalUrl, draft.pinLink, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
     setBusy(true);
     setError("");
     try {
@@ -275,7 +401,9 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
       const cleanShots = inScope.filter((s) => s.description.trim());
       const dropped = shotList.filter((s) => !cleanShots.includes(s) && origShotIds.has(s.id)).map((s) => s.id);
       const removed = { unitIds: removedUnitIds, shotIds: [...new Set([...removedShotIds, ...dropped])] };
-      await onSave({ ...draft, title: draft.title.trim(), createdBy: currentUser, createdAt: new Date().toISOString() }, keepUnits, cleanShots, removed, isNew, originalLinks);
+      const keepKeywords = keywords.filter((k) => k.keyword.trim());
+      const goneKeywords = [...removedKeywordIds, ...keywords.filter((k) => !k.keyword.trim() && origKeywordIds.has(k.id)).map((k) => k.id)];
+      await onSave({ ...draft, title: draft.title.trim(), createdBy: currentUser, createdAt: new Date().toISOString() }, keepUnits, cleanShots, removed, isNew, originalLinks, { keywords: keepKeywords, removedKeywordIds: goneKeywords });
     } catch (err) {
       setError("Couldn't save: " + err.message);
       setBusy(false);
@@ -323,8 +451,8 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
 
         <Field label="Status">
           <StatusStepper postType={draft.postType} status={draft.status} onChange={(status) => set({ status })} />
-          {draft.status === "scheduled" && <div style={{ fontSize: 11.5, color: STYLES.slate, marginTop: 8 }}>Saving adds this post to the calendar at its publish time, with the seeder comments in the event description. It moves to Live automatically once that time passes.</div>}
-          {draft.status === "ready_to_post" && <div style={{ fontSize: 11.5, color: STATUS_COLOR.ready_to_post, marginTop: 8 }}>For posts that can't be pre-scheduled. Saving adds it to the calendar and creates a task for Cathy to post it, due on the publish date. It stays here until you move it to Live after posting.</div>}
+          {draft.status === "scheduled" && <div style={{ fontSize: 11.5, color: STYLES.slate, marginTop: 8 }}>{createsCalendarEvent(draft.postType) ? "Saving adds this post to the calendar at its publish time, with the seeder comments in the event description. " : "This type doesn't go on the calendar. "}It moves to Live automatically once its publish time passes.</div>}
+          {draft.status === "ready_to_post" && <div style={{ fontSize: 11.5, color: STATUS_COLOR.ready_to_post, marginTop: 8 }}>For posts that can't be pre-scheduled. Saving {createsCalendarEvent(draft.postType) ? "adds it to the calendar and " : ""}creates a task for Cathy to post it, due on the publish date. It stays here until you move it to Live after posting.</div>}
           {draft.calendarEventId && (isOnCalendarStatus(draft.status) || draft.status === "live") && <div style={{ fontSize: 11.5, color: STYLES.green, marginTop: 4 }}>On the calendar. Changes to the title, date, time, or seeder comments update the event. Moving the post out of Scheduled, Ready to manually post, or Live removes it.</div>}
         </Field>
 
@@ -344,6 +472,8 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
         <Field label="Idea overview">
           <textarea value={draft.description} onChange={(e) => set({ description: e.target.value })} rows={3} style={textareaStyle} placeholder="What is this post, and why?" />
         </Field>
+
+        {cfg.music && <Field label="Music / audio"><input value={draft.musicAudio} onChange={(e) => set({ musicAudio: e.target.value })} style={inputStyle} placeholder="Track name, artist, or link" /></Field>}
 
         {/* ---- Carousel slides / reel beats ---- */}
         {cfg.units && (
@@ -376,11 +506,38 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
               </>
             )}
             {showOverlay && <Field label="Text overlay"><textarea value={draft.textOverlay} onChange={(e) => set({ textOverlay: e.target.value })} rows={2} style={textareaStyle} /></Field>}
+            {cfg.poll && !cfg.caption && (
+              <div style={{ marginBottom: 14 }}>
+                <PollToggle draft={draft} set={set} />
+                {draft.pollEnabled && <div style={{ marginTop: 8 }}><PollFields draft={draft} set={set} /></div>}
+              </div>
+            )}
             {cfg.pin && (
               <>
+                <Field label="Pin title"><input value={draft.pinTitle} onChange={(e) => set({ pinTitle: e.target.value })} style={inputStyle} /></Field>
                 <Field label="Pin description"><textarea value={draft.pinDescription} onChange={(e) => set({ pinDescription: e.target.value })} rows={3} style={textareaStyle} /></Field>
+                <Field label="Link (where the pin takes a viewer)" hint="Separate from the image file link below.">
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input value={draft.pinLink} onChange={(e) => set({ pinLink: e.target.value })} style={inputStyle} placeholder="https://raptrmysteries.com/…" inputMode="url" />
+                    {draft.pinLink && /^https?:\/\//i.test(draft.pinLink) && <a href={draft.pinLink} target="_blank" rel="noopener noreferrer" aria-label="Open link" style={{ ...selectStyle(), display: "flex", alignItems: "center", color: STYLES.ink }}><ExternalLink size={16} /></a>}
+                  </div>
+                </Field>
+                <Field label="Alt text"><textarea value={draft.pinAltText} onChange={(e) => set({ pinAltText: e.target.value })} rows={2} style={textareaStyle} placeholder="Describe the image for people who can't see it" /></Field>
+                <Field label="Topics" hint="Up to 10 per pin."><TopicPicker selected={draft.pinTopics} onChange={(pinTopics) => set({ pinTopics })} /></Field>
+                <Field label="Primary board">
+                  <select value={draft.pinBoardPrimary} onChange={(e) => set({ pinBoardPrimary: e.target.value, pinBoardsSecondary: draft.pinBoardsSecondary.filter((b) => b !== e.target.value) })} style={inputStyle}>
+                    <option value="">Choose a board…</option>
+                    {PIN_BOARDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                </Field>
+                <Field label="Secondary boards (optional)">
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {PIN_BOARDS.filter((b) => b !== draft.pinBoardPrimary).map((b) => (
+                      <ToggleChip key={b} small active={draft.pinBoardsSecondary.includes(b)} onClick={() => set({ pinBoardsSecondary: draft.pinBoardsSecondary.includes(b) ? draft.pinBoardsSecondary.filter((x) => x !== b) : [...draft.pinBoardsSecondary, b] })}>{b}</ToggleChip>
+                    ))}
+                  </div>
+                </Field>
                 <Field label="Categories / tags" hint="Comma separated"><CommaTagInput tags={draft.pinCategories} onChange={(pinCategories) => set({ pinCategories })} placeholder="e.g. party ideas, murder mystery" /></Field>
-                <Field label="Boards to save to" hint="Comma separated"><CommaTagInput keepCase tags={draft.pinBoards} onChange={(pinBoards) => set({ pinBoards })} placeholder="board names" /></Field>
               </>
             )}
             <ShotGroup label={cfg.shotLabel} shots={shotList} multi={cfg.shots === "multi"} mediaById={mediaById} onPatch={patchShot} onRemove={dropShotFromList} onAdd={() => addShot(null)} onFind={setPickerShotId} />
@@ -406,7 +563,16 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
 
         {(showCaption || showSeeders) && (
           <Section title="Caption & seeder comments">
-            {showCaption && <Field label="Caption"><textarea value={draft.caption} onChange={(e) => set({ caption: e.target.value })} rows={5} style={textareaStyle} placeholder="The caption as it will be posted, hashtags included" /></Field>}
+            {showCaption && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Caption</label>
+                  {cfg.poll && <PollToggle draft={draft} set={set} />}
+                </div>
+                <textarea value={draft.caption} onChange={(e) => set({ caption: e.target.value })} rows={5} style={textareaStyle} placeholder="The caption as it will be posted, hashtags included" />
+                {cfg.poll && draft.pollEnabled && <div style={{ marginTop: 10 }}><PollFields draft={draft} set={set} /></div>}
+              </div>
+            )}
             {showSeeders && SEEDER_FIELDS.map((f) => (
               <Field key={f.key} label={f.label}><textarea value={draft[f.key]} onChange={(e) => set({ [f.key]: e.target.value })} rows={2} style={textareaStyle} /></Field>
             ))}
@@ -425,6 +591,10 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
         <Field label="Notes">
           <textarea value={draft.notes} onChange={(e) => set({ notes: e.target.value })} rows={3} style={textareaStyle} placeholder="Ideas, references, links, reminders…" />
         </Field>
+
+        {draft.status === "live" && (
+          <MetricsSection draft={draft} set={set} keywords={keywords} onKeywordsChange={(next, removedId) => { setKeywords(next); if (removedId && origKeywordIds.has(removedId)) setRemovedKeywordIds((ids) => [...ids, removedId]); }} />
+        )}
 
         {error && <div style={{ background: "#F4D9D9", color: STYLES.wax, padding: "8px 10px", borderRadius: 4, fontSize: 13, marginBottom: 12 }}>{error}</div>}
 

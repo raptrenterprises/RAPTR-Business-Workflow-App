@@ -23,8 +23,19 @@ function postFromRow(r) {
     sqsTags: r.sqs_tags || [],
     crossLinks: r.cross_links || "",
     pinCategories: r.pin_categories || [],
-    pinBoards: r.pin_boards || [],
+    pinBoardPrimary: r.pin_board_primary || "",
+    pinBoardsSecondary: r.pin_boards_secondary || [],
     pinDescription: r.pin_description || "",
+    pinTitle: r.pin_title || "",
+    pinLink: r.pin_link || "",
+    pinTopics: r.pin_topics || [],
+    pinAltText: r.pin_alt_text || "",
+    musicAudio: r.music_audio || "",
+    pollEnabled: !!r.poll_enabled,
+    pollQuestion: r.poll_question || "",
+    pollOptions: r.poll_options || [],
+    metrics: r.metrics && typeof r.metrics === "object" ? r.metrics : {},
+    metricsUpdatedOn: r.metrics_updated_on || "",
     attachments: Array.isArray(r.attachments) ? r.attachments.map((a, i) => ({ id: a.id || `att-${i}`, label: a.label || "", url: a.url || "" })) : [],
     notes: r.notes || "",
     tags: r.tags || [],
@@ -57,13 +68,28 @@ function postToRow(p) {
     sqs_tags: p.sqsTags || [],
     cross_links: p.crossLinks || null,
     pin_categories: p.pinCategories || [],
-    pin_boards: p.pinBoards || [],
+    pin_board_primary: p.pinBoardPrimary || null,
+    pin_boards_secondary: p.pinBoardsSecondary || [],
     pin_description: p.pinDescription || null,
+    pin_title: p.pinTitle || null,
+    pin_link: p.pinLink || null,
+    pin_topics: (p.pinTopics || []).slice(0, 10),
+    pin_alt_text: p.pinAltText || null,
+    music_audio: p.musicAudio || null,
+    poll_enabled: !!p.pollEnabled,
+    poll_question: p.pollQuestion || null,
+    poll_options: (p.pollOptions || []).map((o) => o.trim()).filter(Boolean),
+    metrics: p.metrics || {},
+    metrics_updated_on: p.metricsUpdatedOn || null,
     attachments: (p.attachments || []).filter((a) => a.label.trim() || a.url.trim()).map((a) => ({ id: a.id, label: a.label.trim(), url: a.url.trim() })),
     notes: p.notes || null,
     tags: p.tags || [],
     campaign_id: p.campaignId || null,
   };
+}
+
+function keywordFromRow(r) {
+  return { id: r.id, postId: r.post_id, keyword: r.keyword, impressions: r.impressions ?? "", clicks: r.clicks ?? "", ctr: r.ctr ?? "", avgPosition: r.avg_position ?? "" };
 }
 
 function unitFromRow(r) {
@@ -112,6 +138,12 @@ export async function fetchUnits() {
   return data.map(unitFromRow);
 }
 
+export async function fetchKeywords() {
+  const { data, error } = await supabase.from("post_keywords").select("*").order("created_at", { ascending: true });
+  if (error) throw error;
+  return data.map(keywordFromRow);
+}
+
 export async function fetchCampaigns() {
   const { data, error } = await supabase.from("campaigns").select("*").order("created_at", { ascending: false });
   if (error) throw error;
@@ -122,7 +154,7 @@ export async function fetchCampaigns() {
 // row first, then removed units/shots, then units (shots may point at them), then
 // shots, and media links last so the database's "shot has media -> complete" and
 // "all shots done -> Filmed" rules see the final state.
-export async function savePost(post, units, shots, removed, isNew, originalLinks = {}) {
+export async function savePost(post, units, shots, removed, isNew, originalLinks = {}, extras = { keywords: [], removedKeywordIds: [] }) {
   if (isNew) {
     const { error } = await supabase.from("posts").insert({ id: post.id, ...postToRow(post), created_by: post.createdBy, created_at: post.createdAt });
     if (error) throw error;
@@ -173,6 +205,22 @@ export async function savePost(post, units, shots, removed, isNew, originalLinks
     const { error } = await supabase.from("shot_item_media").upsert(toAdd, { onConflict: "shot_item_id,media_id", ignoreDuplicates: true });
     if (error) throw error;
   }
+  if (extras.removedKeywordIds.length > 0) {
+    const { error } = await supabase.from("post_keywords").delete().in("id", extras.removedKeywordIds);
+    if (error) throw error;
+  }
+  if (extras.keywords.length > 0) {
+    const num = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
+    const rows = extras.keywords.map((k) => {
+      const impressions = num(k.impressions);
+      const clicks = num(k.clicks);
+      let ctr = num(k.ctr);
+      if (ctr === null && impressions > 0 && clicks !== null) ctr = Math.round((clicks / impressions) * 10000) / 100; // click rate in percent
+      return { id: k.id, post_id: post.id, keyword: k.keyword.trim(), impressions, clicks, ctr, avg_position: num(k.avgPosition), period_days: 30 };
+    });
+    const { error } = await supabase.from("post_keywords").upsert(rows);
+    if (error) throw error;
+  }
 }
 
 export async function setPostStatus(id, status) {
@@ -217,6 +265,7 @@ export const subscribeShotItems = (cb) => subscribeTable("shot_items", cb);
 export const subscribeCampaigns = (cb) => subscribeTable("campaigns", cb);
 export const subscribeShotMedia = (cb) => subscribeTable("shot_item_media", cb);
 export const subscribeUnits = (cb) => subscribeTable("post_units", cb);
+export const subscribeKeywords = (cb) => subscribeTable("post_keywords", cb);
 
 export async function setShotCompleted(id, completed) {
   const { error } = await supabase.from("shot_items").update({ completed }).eq("id", id);

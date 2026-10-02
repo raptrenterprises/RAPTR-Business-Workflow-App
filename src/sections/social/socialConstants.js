@@ -7,7 +7,7 @@ export const ASSET_KINDS = [
   { value: "finished", label: "Finished post" },
 ];
 export const POST_FORMATS = ["Reel", "Carousel", "Image post", "Story", "Pinterest pin", "Blog thumbnail", "Other"];
-export const MEDIA_PEOPLE = ["Cathy", "Evan", "Product", "Other"];
+export const MEDIA_PEOPLE = ["Cathy", "Evan", "Product", "Text only", "Other"];
 
 // Tags are stored lowercase and trimmed so "Flatlay" and "flatlay " can't become two tags.
 export function normalizeTag(t) {
@@ -22,14 +22,17 @@ export const POST_TYPES = ["Reel", "Carousel", "Image post", "Story", "Pinterest
 //   units: "slide" | "beat"  -> a dynamic, reorderable list, each with its own fields/shots
 //   shots: "single" | "multi" -> shot list item(s) on the post itself (when there are no units)
 export const TYPE_CONFIG = {
-  "Image post": { caption: true, seeders: true, overlay: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)", manual: true },
-  Story: { overlay: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)", manual: true },
-  Carousel: { caption: true, seeders: true, units: "slide", manual: true },
-  Reel: { caption: true, seeders: true, units: "beat", finalLabel: "Final edited video (link)", manual: true },
+  "Image post": { caption: true, seeders: true, poll: true, overlay: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)", manual: true },
+  Story: { poll: true, music: true, overlay: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)", manual: true },
+  Carousel: { caption: true, seeders: true, poll: true, music: true, units: "slide", manual: true },
+  Reel: { caption: true, seeders: true, poll: true, music: true, units: "beat", finalLabel: "Final edited video (link)", manual: true },
   "Blog post": { blog: true, shots: "single", shotLabel: "Thumbnail (shot list item)", finalLabel: "Thumbnail image (link)" },
   "Pinterest pin": { overlay: true, pin: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)" },
   Other: { shots: "multi", shotLabel: "Shot list items", attachments: true },
 };
+// Only posts with seeder comments get an auto-created calendar event.
+export const CALENDAR_TYPES = ["Image post", "Reel", "Carousel"];
+export const createsCalendarEvent = (postType) => CALENDAR_TYPES.includes(postType);
 export const typeConfig = (postType) => TYPE_CONFIG[postType] || TYPE_CONFIG.Other;
 export const UNIT_DEFAULT_COUNT = { slide: 3, beat: 3 };
 export const UNIT_NOUN = { slide: "Slide", beat: "Beat" };
@@ -81,3 +84,61 @@ export function formatPostDate(dateStr) {
   const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
+
+// ---- Pinterest ----
+export const PIN_BOARDS = [
+  "Wedding Weekend Activities",
+  "Murder Mystery Party Ideas",
+  "Dinner Party Games & Hosting Tips",
+  "Hosting Tips & Party Planning",
+  "RAPTR Mysteries: Behind the Scenes",
+  "Dinner Party Recipe & Food Inspiration",
+  "Bachelorette & Group Party Ideas",
+  "Cocktail Recipes & Party Drinks",
+  "Character Reels & Roleplay Inspiration",
+  "Gift Ideas",
+];
+export const PIN_TOPICS = [
+  "french wedding", "destination wedding", "wedding reception", "wedding afterparty", "wedding games", "engagement party",
+  "bridal shower games", "bachelorette party", "couple games", "unsolved mystery", "murder mystery", "murder mystery party",
+  "party games", "dinner party", "disco party", "halloween games", "group games", "indoor games", "birthday games",
+  "role playing games", "cocktail recipes",
+];
+export const PIN_TOPICS_MAX = 10;
+
+// ---- Performance metrics (entered by hand once a post is Live) ----
+// Instagram's current Insights metrics: "views" replaced "impressions" in 2025. Story taps/exits and
+// sticker/link taps are read from the Instagram app's story insights.
+const IG_FEED = [
+  { key: "views", label: "Views" }, { key: "reach", label: "Reach (accounts)" }, { key: "likes", label: "Likes" },
+  { key: "comments", label: "Comments" }, { key: "shares", label: "Shares" }, { key: "saves", label: "Saves" },
+  { key: "total_interactions", label: "Total interactions" }, { key: "profile_visits", label: "Profile visits" }, { key: "follows", label: "Follows" },
+];
+const IG_REEL = [
+  { key: "views", label: "Views (plays)" }, { key: "reach", label: "Reach (accounts)" }, { key: "likes", label: "Likes" },
+  { key: "comments", label: "Comments" }, { key: "shares", label: "Shares" }, { key: "saves", label: "Saves" },
+  { key: "total_interactions", label: "Total interactions" }, { key: "avg_watch_time_s", label: "Average watch time (seconds)" },
+  { key: "total_watch_time_s", label: "Total watch time (seconds)" }, { key: "skip_rate_pct", label: "Skip rate (%)" }, { key: "profile_visits", label: "Profile visits" },
+];
+const IG_STORY = [
+  { key: "views", label: "Views" }, { key: "reach", label: "Reach (accounts)" }, { key: "replies", label: "Replies" }, { key: "shares", label: "Shares" },
+  { key: "taps_forward", label: "Taps forward" }, { key: "taps_back", label: "Taps back" }, { key: "next_story", label: "Next story swipes" }, { key: "exits", label: "Exits" },
+  { key: "profile_visits", label: "Profile visits" }, { key: "follows", label: "Follows" }, { key: "link_taps", label: "Link sticker taps" }, { key: "sticker_taps", label: "Other sticker taps" },
+];
+const PIN = [
+  { key: "impressions", label: "Impressions" }, { key: "saves", label: "Saves" }, { key: "save_rate_pct", label: "Save rate (%)" },
+  { key: "pin_clicks", label: "Pin clicks (closeups)" }, { key: "outbound_clicks", label: "Outbound clicks" },
+  { key: "engagements", label: "Engagements" }, { key: "engagement_rate_pct", label: "Engagement rate (%)" },
+];
+const PIN_VIDEO = [
+  { key: "video_views", label: "Video views (MRC)" }, { key: "video_10s_views", label: "10-second views" }, { key: "video_95_views", label: "95% views" },
+  { key: "video_avg_watch_time_s", label: "Average watch time (seconds)" }, { key: "video_play_time_s", label: "Total play time (seconds)" },
+];
+export const METRICS_BY_TYPE = {
+  "Image post": { groups: [{ title: "Instagram", fields: IG_FEED }] },
+  Carousel: { groups: [{ title: "Instagram", fields: IG_FEED }] },
+  Reel: { groups: [{ title: "Instagram", fields: IG_REEL }] },
+  Story: { groups: [{ title: "Instagram", fields: IG_STORY }] },
+  "Pinterest pin": { groups: [{ title: "Pinterest", fields: PIN }, { title: "Video pins only", fields: PIN_VIDEO }] },
+  "Blog post": { groups: [{ title: "Blog", fields: [{ key: "page_views_30d", label: "Page views (30 days)" }] }], keywords: true },
+};

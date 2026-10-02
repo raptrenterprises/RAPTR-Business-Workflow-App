@@ -83,13 +83,13 @@ export default function RaptrApp() {
           <SectionButton active={section === "threads"} onClick={() => setSection("threads")} icon={<MessageSquare size={15} />} label="Threads" showDot={hasUnseenThread} />
           <SectionButton active={section === "tasks"} onClick={() => setSection("tasks")} icon={<ClipboardList size={15} />} label="Tasks" showDot={hasUrgentTask} />
           <SectionButton active={section === "calendar"} onClick={() => setSection("calendar")} icon={<CalendarDays size={15} />} label="Calendar" showDot={hasEventNow} />
+          <SectionButton active={section === "social"} onClick={() => setSection("social")} icon={<Megaphone size={15} />} label="Marketing" />
           <SectionButton active={section === "gym"} onClick={() => setSection("gym")} icon={<Dumbbell size={15} />} label="Gym" />
           <SectionButton active={section === "raptrmeet"} onClick={() => setSection("raptrmeet")} icon={<PartyPopper size={15} />} label="RAPTRMeet" />
-          <SectionButton active={section === "social"} onClick={() => setSection("social")} icon={<Megaphone size={15} />} label="Social" />
         </div>
       </header>
 
-      {section === "dashboard" && <DashboardSection currentUser={currentUser} users={USERS} onNavigate={setSection} />}
+      {section === "dashboard" && <DashboardSection currentUser={currentUser} users={USERS} onNavigate={setSection} onOpenPost={openPost} />}
       {section === "tasks" && <TasksSection currentUser={currentUser} users={USERS} onOpenPost={openPost} />}
       {section === "threads" && <ThreadsSection currentUser={currentUser} users={USERS} />}
       {section === "calendar" && <CalendarSection currentUser={currentUser} users={USERS} onOpenPost={openPost} />}
@@ -104,7 +104,7 @@ export default function RaptrApp() {
         </Suspense>
       )}
       {section === "social" && (
-        <Suspense fallback={<CenterMsg>Loading Social…</CenterMsg>}>
+        <Suspense fallback={<CenterMsg>Loading Marketing…</CenterMsg>}>
           <SocialSection currentUser={currentUser} users={USERS} openPostId={openPostId} onOpenPostHandled={() => setOpenPostId(null)} />
         </Suspense>
       )}

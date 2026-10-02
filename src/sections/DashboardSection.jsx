@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
-import { CalendarDays, MessageSquare, ClipboardList, Dumbbell, ChevronRight } from "lucide-react";
-import { STYLES, todayStr, effectiveUrgency, comparePriority, importanceColor, urgencyColor, selectStyle, WORKOUT_TYPES } from "../constants";
+import { CalendarDays, MessageSquare, ClipboardList, Dumbbell, ChevronRight, Megaphone } from "lucide-react";
+import { STYLES, todayStr, addDays, formatClockTime, effectiveUrgency, comparePriority, importanceColor, urgencyColor, selectStyle, WORKOUT_TYPES } from "../constants";
 import { Badge } from "../components/Shared";
 import { fetchEvents, subscribeEvents } from "../lib/eventsApi";
 import { fetchTasks, subscribeTasks } from "../lib/tasksApi";
 import { fetchThreads, subscribeThreads } from "../lib/threadsApi";
+import { fetchPosts, subscribePosts } from "../lib/postsApi";
 import { fetchChallenges, updateChallenge, subscribeChallenges } from "../lib/gymApi";
 import { eventCoversDay } from "../constants";
+import { STATUS_LABEL as POST_STATUS_LABEL, STATUS_COLOR as POST_STATUS_COLOR, formatPostDate } from "./social/socialConstants";
 import { normalizeParticipant, targetForDate, weightStatus, STATUS_COLOR } from "../lib/gymHelpers";
 
 const WeightChart = lazy(() => import("../components/WeightChart"));
@@ -14,25 +16,28 @@ const WeightChart = lazy(() => import("../components/WeightChart"));
 const MS_DAY = 86400000;
 
 
-export default function DashboardSection({ currentUser, users, onNavigate }) {
+export default function DashboardSection({ currentUser, users, onNavigate, onOpenPost }) {
+  const [posts, setPosts] = useState([]);
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [threads, setThreads] = useState([]);
   const [challenges, setChallenges] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const reloadPosts = useCallback(async () => { try { setPosts(await fetchPosts()); } catch { /* card just shows empty */ } }, []);
   const reloadEvents = useCallback(async () => { try { setEvents(await fetchEvents()); } catch { /* card just shows empty */ } }, []);
   const reloadTasks = useCallback(async () => { try { setTasks(await fetchTasks()); } catch { /* non-fatal */ } }, []);
   const reloadThreads = useCallback(async () => { try { setThreads(await fetchThreads()); } catch { /* non-fatal */ } }, []);
   const reloadChallenges = useCallback(async () => { try { setChallenges(await fetchChallenges()); } catch { /* non-fatal */ } }, []);
 
   useEffect(() => {
-    Promise.all([reloadEvents(), reloadTasks(), reloadThreads(), reloadChallenges()]).finally(() => setLoading(false));
+    Promise.all([reloadEvents(), reloadTasks(), reloadThreads(), reloadChallenges(), reloadPosts()]).finally(() => setLoading(false));
     const u1 = subscribeEvents(reloadEvents);
     const u2 = subscribeTasks(reloadTasks);
+    const uPosts = subscribePosts(reloadPosts);
     const u3 = subscribeThreads(reloadThreads);
     const u4 = subscribeChallenges(reloadChallenges);
-    return () => { u1(); u2(); u3(); u4(); };
+    return () => { u1(); u2(); u3(); u4(); uPosts(); };
   }, [reloadEvents, reloadTasks, reloadThreads, reloadChallenges]);
 
   const todaysEvents = useMemo(() => events.filter((e) => eventCoversDay(e, todayStr())), [events]);
@@ -58,6 +63,14 @@ export default function DashboardSection({ currentUser, users, onNavigate }) {
     return challenges.find((c) => today >= c.startDate && today <= c.endDate) || null;
   }, [challenges]);
 
+  // Posts due within a week (or already overdue) that aren't scheduled or set to post manually yet.
+  const postsToSchedule = useMemo(() => {
+    const limit = addDays(todayStr(), 7);
+    return posts
+      .filter((p) => p.publishDate && p.publishDate <= limit && !["scheduled", "ready_to_post", "live"].includes(p.status))
+      .sort((a, b) => `${a.publishDate} ${a.publishTime}`.localeCompare(`${b.publishDate} ${b.publishTime}`));
+  }, [posts]);
+
   if (loading) {
     return <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", color: STYLES.slate, fontFamily: "Georgia, serif" }}>Loading dashboard…</div>;
   }
@@ -67,6 +80,7 @@ export default function DashboardSection({ currentUser, users, onNavigate }) {
       <CalendarCard events={todaysEvents} onNavigate={onNavigate} />
       <ThreadsCard threads={threadItems} currentUser={currentUser} users={users} onNavigate={onNavigate} />
       <TasksCard tasks={taskItems} onNavigate={onNavigate} />
+      <PostsToScheduleCard posts={postsToSchedule} onNavigate={onNavigate} onOpenPost={onOpenPost} />
       <GymCard challenge={activeChallenge} currentUser={currentUser} users={users} onNavigate={onNavigate} onReload={reloadChallenges} />
     </main>
   );
@@ -150,6 +164,35 @@ function TasksCard({ tasks, onNavigate }) {
                 <span style={{ flex: 1 }}>{t.title}</span>
                 <Badge label={urg} color={urgencyColor(urg)} />
                 <Badge label={t.importance} color={importanceColor(t.importance)} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </CardShell>
+  );
+}
+
+function PostsToScheduleCard({ posts, onNavigate, onOpenPost }) {
+  const today = todayStr();
+  return (
+    <CardShell icon={<Megaphone size={18} color={STYLES.wax} />} title="Posts to schedule" onNavigate={onNavigate} section="social">
+      {posts.length === 0 ? (
+        <EmptyRow>Everything due in the next week is scheduled.</EmptyRow>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {posts.map((p) => {
+            const overdue = p.publishDate < today;
+            const c = POST_STATUS_COLOR[p.status];
+            return (
+              <div key={p.id} onClick={() => onOpenPost(p.id)} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", padding: "6px 8px", borderRadius: 4, background: STYLES.brass + "14" }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  {p.title}
+                  <span style={{ display: "block", fontSize: 12, color: overdue ? STYLES.wax : STYLES.slate, fontWeight: overdue ? 700 : 400 }}>
+                    {overdue ? "Overdue · " : ""}{formatPostDate(p.publishDate)}{p.publishTime ? ` · ${formatClockTime(p.publishTime)}` : ""} · {p.postType}
+                  </span>
+                </span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: c, border: `1px solid ${c}66`, background: `${c}14`, padding: "2px 9px", borderRadius: 10, whiteSpace: "nowrap" }}>{POST_STATUS_LABEL[p.status]}</span>
               </div>
             );
           })}

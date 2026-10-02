@@ -48,6 +48,7 @@ export default function PlannerTab({ posts, shots, campaigns, onOpenPost, onAdva
   const [typeFilter, setTypeFilter] = useState("all");
   const [campaignFilter, setCampaignFilter] = useState("all");
   const [showLive, setShowLive] = useState(false);
+  const [showIdeas, setShowIdeas] = useState(false);
 
   const campaignName = useMemo(() => Object.fromEntries(campaigns.map((c) => [c.id, c.name])), [campaigns]);
   const shotStats = useMemo(() => {
@@ -67,8 +68,10 @@ export default function PlannerTab({ posts, shots, campaigns, onOpenPost, onAdva
     }).sort(sortByDate);
   }, [posts, search, statusFilter, typeFilter, campaignFilter]);
 
-  const active = filtered.filter((p) => p.status !== "live");
+  const active = filtered.filter((p) => p.status !== "live" && p.status !== "idea");
+  const ideas = filtered.filter((p) => p.status === "idea");
   const live = filtered.filter((p) => p.status === "live");
+  const ideasVisible = showIdeas || statusFilter.includes("idea");
   const liveVisible = showLive || statusFilter.includes("live");
   const toggleStatus = (s) => setStatusFilter((list) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s]));
   const filtersActive = search || statusFilter.length > 0 || typeFilter !== "all" || campaignFilter !== "all";
@@ -111,8 +114,16 @@ export default function PlannerTab({ posts, shots, campaigns, onOpenPost, onAdva
       ) : (
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {active.length === 0 ? <EmptyMsg>Nothing in progress. Everything here is already live.</EmptyMsg> : active.map(renderCard)}
+            {active.length === 0 ? <EmptyMsg>Nothing in progress right now.</EmptyMsg> : active.map(renderCard)}
           </div>
+          {ideas.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <button onClick={() => setShowIdeas(!showIdeas)} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, fontSize: 13.5, display: "flex", alignItems: "center", gap: 4, padding: 0, marginBottom: 8 }}>
+                {ideasVisible ? <ChevronDown size={15} /> : <ChevronRight size={15} />} Ideas ({ideas.length})
+              </button>
+              {ideasVisible && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{ideas.map(renderCard)}</div>}
+            </div>
+          )}
           {live.length > 0 && (
             <div style={{ marginTop: 20 }}>
               <button onClick={() => setShowLive(!showLive)} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, fontSize: 13.5, display: "flex", alignItems: "center", gap: 4, padding: 0, marginBottom: 8 }}>

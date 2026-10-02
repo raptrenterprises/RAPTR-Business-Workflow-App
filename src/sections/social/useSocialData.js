@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { fetchPosts, fetchShotItems, fetchCampaigns, fetchShotMedia, fetchUnits, subscribePosts, subscribeShotItems, subscribeCampaigns, subscribeShotMedia, subscribeUnits } from "../../lib/postsApi";
+import { fetchPosts, fetchShotItems, fetchCampaigns, fetchShotMedia, fetchUnits, fetchKeywords, subscribePosts, subscribeShotItems, subscribeCampaigns, subscribeShotMedia, subscribeUnits, subscribeKeywords } from "../../lib/postsApi";
 import { fetchMedia, subscribeMedia } from "../../lib/mediaApi";
 
 // Loads posts, shot items, campaigns, the media library, and shot<->media links once
@@ -12,6 +12,7 @@ export default function useSocialData() {
   const [media, setMedia] = useState([]);
   const [shotMedia, setShotMedia] = useState([]);
   const [units, setUnits] = useState([]);
+  const [keywords, setKeywords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -35,8 +36,12 @@ export default function useSocialData() {
     try { setUnits(await fetchUnits()); } catch (e) { setError("Couldn't load slides and beats: " + e.message); }
   }, []);
 
+  const reloadKeywords = useCallback(async () => {
+    try { setKeywords(await fetchKeywords()); } catch (e) { setError("Couldn't load keywords: " + e.message); }
+  }, []);
+
   useEffect(() => {
-    Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits()]).finally(() => setLoading(false));
+    Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits(), reloadKeywords()]).finally(() => setLoading(false));
     const subs = [
       subscribePosts(reloadPosts),
       subscribeShotItems(() => { reloadShots(); reloadPosts(); }), // a finished shot list can move a post to "Filmed"
@@ -44,10 +49,11 @@ export default function useSocialData() {
       subscribeMedia(reloadMedia),
       subscribeShotMedia(() => { reloadShotMedia(); reloadShots(); reloadPosts(); }),
       subscribeUnits(reloadUnits),
+      subscribeKeywords(reloadKeywords),
     ];
     return () => subs.forEach((u) => u());
-  }, [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits]);
+  }, [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits, reloadKeywords]);
 
-  const reloadAll = useCallback(() => Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits()]), [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits]);
-  return { posts, shots, units, campaigns, media, shotMedia, loading, error, setError, reloadAll };
+  const reloadAll = useCallback(() => Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits(), reloadKeywords()]), [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits, reloadKeywords]);
+  return { posts, shots, units, keywords, campaigns, media, shotMedia, loading, error, setError, reloadAll };
 }
