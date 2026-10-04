@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Plus, Trash2, ChevronRight, ChevronUp, ChevronDown, Search, ExternalLink } from "lucide-react";
 import { STYLES, uid, selectStyle } from "../../constants";
 import MediaPicker from "./MediaPicker";
@@ -139,20 +139,24 @@ function ShotGroup({ label, shots, multi, mediaById, onPatch, onRemove, onAdd, o
   );
 }
 
-function UnitCard({ index, count, noun, kind, unit, onPatch, onMove, onRemove, children }) {
+function UnitCard({ index, count, noun, kind, unit, open, summary, media, onToggle, onPatch, onMove, onRemove, children }) {
   return (
     <div style={{ background: STYLES.parchment, border: `1px solid ${STYLES.ink}33`, borderLeft: `4px solid ${STYLES.purple}`, borderRadius: 6, padding: 12, marginBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-        <div style={{ fontFamily: "Georgia, serif", fontSize: 15, flex: 1 }}>{noun} {index + 1}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: open ? 10 : 0 }}>
+        <button type="button" onClick={() => onToggle(unit.id)} aria-expanded={open} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", padding: 0, color: STYLES.ink }}>
+          {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          <span style={{ fontFamily: "Georgia, serif", fontSize: 15 }}>{noun} {index + 1}</span>
+          {!open && <span style={{ fontSize: 12.5, color: STYLES.slate, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>}
+        </button>
         <button type="button" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label={`Move ${noun} up`} style={{ ...iconBtn, opacity: index === 0 ? 0.3 : 1 }}><ChevronUp size={18} /></button>
         <button type="button" disabled={index === count - 1} onClick={() => onMove(index, 1)} aria-label={`Move ${noun} down`} style={{ ...iconBtn, opacity: index === count - 1 ? 0.3 : 1 }}><ChevronDown size={18} /></button>
         <button type="button" onClick={() => onRemove(unit)} aria-label={`Remove ${noun}`} style={iconBtn}><Trash2 size={16} /></button>
       </div>
-      {kind === "slide" ? (
+      {open && (kind === "slide" ? (
         <>
           <Field label="Text overlay"><textarea value={unit.textOverlay} onChange={(e) => onPatch(unit.id, { textOverlay: e.target.value })} rows={2} style={textareaStyle} /></Field>
           {children}
-          <LinkField label="Final edited image (link)" value={unit.finalUrl} onChange={(v) => onPatch(unit.id, { finalUrl: v })} />
+          <FinalMediaField label="Final edited image" mediaId={unit.finalMediaId} legacyUrl={unit.finalUrl} media={media} pickType="photo" onPick={(id) => onPatch(unit.id, { finalMediaId: id })} onClearLegacy={() => onPatch(unit.id, { finalUrl: "" })} />
         </>
       ) : (
         <>
@@ -160,42 +164,112 @@ function UnitCard({ index, count, noun, kind, unit, onPatch, onMove, onRemove, c
           <Field label="Editing notes / text overlays"><textarea value={unit.editingNotes} onChange={(e) => onPatch(unit.id, { editingNotes: e.target.value })} rows={3} style={textareaStyle} placeholder="Cuts, transitions, music, on-screen text" /></Field>
           {children}
         </>
+      ))}
+    </div>
+  );
+}
+
+// A drop-down that opens a pop-up of checkboxes, so several items can be ticked without cluttering the page.
+// Optionally lets you type a one-off entry, and caps how many can be chosen.
+function MultiSelectDropdown({ options, selected, onChange, max, allowCustom, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState("");
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("touchstart", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const full = !!max && selected.length >= max;
+  const all = [...selected.filter((x) => !options.includes(x)), ...options]; // one-off entries stay listed (and checked)
+  const toggle = (o) => {
+    if (selected.includes(o)) onChange(selected.filter((x) => x !== o));
+    else if (!full) onChange([...selected, o]);
+  };
+  const addCustom = () => {
+    const t = normalizeTag(custom);
+    setCustom("");
+    if (t && !full && !selected.includes(t)) onChange([...selected, t]);
+  };
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button type="button" onClick={() => setOpen(!open)} style={{ ...inputStyle, textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "#fff" }}>
+        <span>{selected.length > 0 ? `${selected.length} selected${max ? ` (max ${max})` : ""}` : placeholder}</span>
+        <ChevronDown size={16} />
+      </button>
+      {open && (
+        <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, top: "100%", marginTop: 4, background: "#fff", border: `1px solid ${STYLES.ink}44`, borderRadius: 6, boxShadow: "0 6px 20px rgba(0,0,0,0.18)", maxHeight: 320, overflowY: "auto", padding: 8 }}>
+          {allowCustom && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input value={custom} disabled={full} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }} placeholder="Add a one-off topic" style={inputStyle} />
+              <button type="button" disabled={full || !custom.trim()} onClick={addCustom} style={{ ...selectStyle(), cursor: "pointer" }}>Add</button>
+            </div>
+          )}
+          {all.map((o) => {
+            const checked = selected.includes(o);
+            const blocked = !checked && full;
+            return (
+              <label key={o} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", fontSize: 14, cursor: blocked ? "default" : "pointer", opacity: blocked ? 0.45 : 1 }}>
+                <input type="checkbox" checked={checked} disabled={blocked} onChange={() => toggle(o)} style={{ width: 17, height: 17, accentColor: STYLES.purple }} /> {o}
+              </label>
+            );
+          })}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+            <button type="button" onClick={() => setOpen(false)} style={{ background: STYLES.wax, color: STYLES.parchment, border: "none", borderRadius: 4, padding: "6px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Done</button>
+          </div>
+        </div>
+      )}
+      {selected.length > 0 && (
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+          {selected.map((t) => (
+            <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 3, background: STYLES.purple, color: "#fff", borderRadius: 12, padding: "2px 4px 2px 10px", fontSize: 12 }}>
+              {t}
+              <button type="button" onClick={() => onChange(selected.filter((x) => x !== t))} aria-label={`Remove ${t}`} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={13} /></button>
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-// Pinterest topics: pick from the list, or type a one-off topic for this pin only. Max 10.
-function TopicPicker({ selected, onChange }) {
-  const [custom, setCustom] = useState("");
-  const full = selected.length >= PIN_TOPICS_MAX;
-  const add = (t) => {
-    const topic = normalizeTag(t);
-    if (!topic || full || selected.includes(topic)) return;
-    onChange([...selected, topic]);
-  };
+// The final edited image/video: picked from the media library (not pasted as a link).
+function FinalMediaField({ label, mediaId, legacyUrl, media, pickType, onPick, onClearLegacy }) {
+  const [open, setOpen] = useState(false);
+  const item = media.find((m) => m.id === mediaId);
   return (
-    <div>
-      {selected.length > 0 && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-          {selected.map((t) => (
-            <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: STYLES.purple, color: "#fff", borderRadius: 14, padding: "4px 6px 4px 12px", fontSize: 13 }}>
-              {t}
-              <button type="button" onClick={() => onChange(selected.filter((x) => x !== t))} aria-label={`Remove ${t}`} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
-            </span>
-          ))}
+    <Field label={label}>
+      {item ? (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 8 }}>
+          <span style={{ width: 52, height: 52, borderRadius: 4, overflow: "hidden", background: STYLES.gray, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: STYLES.slate }}>
+            {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : item.mediaType}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, wordBreak: "break-word" }}>{item.title}</div>
+            <div style={{ fontSize: 12, color: STYLES.slate }}>{item.assetKind === "finished" ? item.postFormat || "Finished" : "Raw"}{item.isAi ? " · AI" : ""}</div>
+          </div>
+          {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" aria-label="Open file" style={{ ...iconBtn, color: STYLES.ink }}><ExternalLink size={16} /></a>}
+          <button type="button" onClick={() => setOpen(true)} style={{ ...selectStyle(), cursor: "pointer" }}>Change</button>
+          <button type="button" onClick={() => onPick("")} aria-label="Remove" style={iconBtn}><X size={16} /></button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setOpen(true)} style={{ ...selectStyle(), cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 600 }}><Search size={13} /> Choose from the media library</button>
+      )}
+      {legacyUrl && (
+        <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 6 }}>
+          Earlier pasted link: <a href={legacyUrl} target="_blank" rel="noopener noreferrer" style={{ color: STYLES.blue }}>open</a>{" "}
+          <button type="button" onClick={onClearLegacy} style={{ background: "transparent", border: "none", color: STYLES.wax, cursor: "pointer", textDecoration: "underline", fontSize: 12 }}>remove</button>
         </div>
       )}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <select value="" disabled={full} onChange={(e) => add(e.target.value)} style={{ ...inputStyle, flex: "1 1 180px", width: "auto" }}>
-          <option value="">{full ? "Maximum reached" : "Choose a topic…"}</option>
-          {PIN_TOPICS.filter((t) => !selected.includes(t)).map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <input value={custom} disabled={full} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(custom); setCustom(""); } }} placeholder="Or add a one-off topic" style={{ ...inputStyle, flex: "1 1 160px", width: "auto" }} />
-        <button type="button" disabled={full || !custom.trim()} onClick={() => { add(custom); setCustom(""); }} style={{ ...selectStyle(), cursor: "pointer" }}>Add</button>
-      </div>
-      <div style={{ fontSize: 11.5, color: STYLES.slate, marginTop: 3 }}>{selected.length}/{PIN_TOPICS_MAX} topics</div>
-    </div>
+      {open && (
+        <MediaPicker media={media} single initialKind="finished" title="Choose the final media" initialSelected={mediaId ? [mediaId] : []} requirements={{ mediaType: pickType || "", people: [], tags: [] }}
+          onClose={() => setOpen(false)} onConfirm={(ids) => { onPick(ids[0] || ""); setOpen(false); }} />
+      )}
+    </Field>
   );
 }
 
@@ -287,10 +361,11 @@ function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
   );
 }
 
-const blankUnit = () => ({ id: uid(), textOverlay: "", script: "", editingNotes: "", finalUrl: "" });
+const blankUnit = () => ({ id: uid(), textOverlay: "", script: "", editingNotes: "", finalUrl: "", finalMediaId: "" });
 const blankShot = (postId, unitId) => ({ id: uid(), postId, unitId: unitId || null, description: "", mediaType: "", people: [], tags: [], completed: false, mediaIds: [] });
 const blankPost = (campaignId) => ({
   id: uid(), title: "", postType: "Reel", status: "idea", publishDate: "", publishTime: "", description: "", caption: "", seederComments: "",
+  aiImagesAllowed: false, finalMediaId: "", blogDocUrl: "",
   seederRaptr: "", seederEvan: "", seederEvanReply: "", seederCathy: "", seederCathyReply: "", textOverlay: "", finalUrl: "",
   blogText: "", sqsCategories: [], sqsTags: [], crossLinks: "", pinCategories: [], pinBoardPrimary: "", pinBoardsSecondary: [], pinDescription: "", pinTitle: "", pinLink: "", pinTopics: [], pinAltText: "",
   musicAudio: "", pollEnabled: false, pollQuestion: "", pollOptions: [], metrics: {}, metricsUpdatedOn: "", attachments: [],
@@ -314,7 +389,7 @@ function ensureStructure(postType, units, shots, postId) {
 }
 
 const unitHasContent = (unit, shotList) =>
-  [unit.textOverlay, unit.script, unit.editingNotes, unit.finalUrl].some((v) => v.trim()) || shotList.some((s) => s.unitId === unit.id && s.description.trim());
+  [unit.textOverlay, unit.script, unit.editingNotes, unit.finalUrl, unit.finalMediaId].some((v) => v && v.trim()) || shotList.some((s) => s.unitId === unit.id && s.description.trim());
 const badUrl = (v) => v.trim() && !/^https?:\/\//i.test(v.trim());
 
 export default function PostForm({ post, defaults, notice, shots, units: savedUnits, keywords: savedKeywords, shotMedia, media, campaigns, currentUser, onSave, onDelete, onClose }) {
@@ -333,6 +408,11 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
   const [keywords, setKeywords] = useState(() => savedKeywords.map((k) => ({ ...k })));
   const [removedKeywordIds, setRemovedKeywordIds] = useState([]);
   const origKeywordIds = new Set(savedKeywords.map((k) => k.id));
+  const [expanded, setExpanded] = useState(() => {
+    // Slides/beats start collapsed, except while a post is in the Planned or Filmed stage.
+    const open = post ? post.status === "planned" || post.status === "filmed" : false;
+    return Object.fromEntries(savedUnits.map((u) => [u.id, open]));
+  });
   const [removedUnitIds, setRemovedUnitIds] = useState([]);
   const [removedShotIds, setRemovedShotIds] = useState([]);
   const [pickerShotId, setPickerShotId] = useState(null);
@@ -367,6 +447,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
   const patchUnit = (id, patch) => setUnits((list) => list.map((u) => (u.id === id ? { ...u, ...patch } : u)));
   const addUnit = () => {
     const unit = blankUnit();
+    setExpanded((m) => ({ ...m, [unit.id]: true }));
     setStructure((st) => ({ units: [...st.units, unit], shots: [...st.shots, blankShot(draft.id, unit.id)] }));
   };
   const moveUnit = (index, dir) => setUnits((list) => {
@@ -390,7 +471,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
     if (!draft.title.trim()) { setError("Give this post a title."); return; }
     if (draft.publishTime && !draft.publishDate) { setError("Add a publish date to go with the time."); return; }
     if (isOnCalendarStatus(draft.status) && (!draft.publishDate || !draft.publishTime)) { setError("Add a publish date and time first. The post goes on the calendar at that time."); return; }
-    if ([draft.finalUrl, draft.pinLink, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
+    if ([draft.finalUrl, draft.pinLink, draft.blogDocUrl, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
     setBusy(true);
     setError("");
     try {
@@ -418,6 +499,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
   const shotsForPost = cfg.units ? shotList.filter((s) => !s.unitId || !units.some((u) => u.id === s.unitId)) : shotList;
   const doneCount = shotList.filter((s) => s.completed).length;
   const unitNoun = cfg.units ? UNIT_NOUN[cfg.units] : "";
+  const linkedAiCount = shotList.reduce((n, s) => n + s.mediaIds.filter((id) => mediaById[id]?.isAi).length, 0);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "24px 12px" }} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
@@ -475,14 +557,31 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
 
         {cfg.music && <Field label="Music / audio"><input value={draft.musicAudio} onChange={(e) => set({ musicAudio: e.target.value })} style={inputStyle} placeholder="Track name, artist, or link" /></Field>}
 
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
+            <input type="checkbox" checked={draft.aiImagesAllowed} onChange={(e) => set({ aiImagesAllowed: e.target.checked })} style={{ width: 17, height: 17, accentColor: STYLES.wax }} /> AI images allowed for this post's shot list items
+          </label>
+          {!draft.aiImagesAllowed && linkedAiCount > 0 && <div style={{ fontSize: 12, color: STYLES.wax, marginTop: 4 }}>{linkedAiCount} linked {linkedAiCount === 1 ? "item is" : "items are"} marked AI. Unlink {linkedAiCount === 1 ? "it" : "them"} or allow AI images, or saving may be refused.</div>}
+        </div>
+
         {/* ---- Carousel slides / reel beats ---- */}
         {cfg.units && (
           <Section title={`${unitNoun}s (${units.length})`}>
+            {units.length > 1 && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <button type="button" onClick={() => setExpanded(Object.fromEntries(units.map((u) => [u.id, true])))} style={{ ...selectStyle(), cursor: "pointer", fontSize: 12 }}>Expand all</button>
+                <button type="button" onClick={() => setExpanded(Object.fromEntries(units.map((u) => [u.id, false])))} style={{ ...selectStyle(), cursor: "pointer", fontSize: 12 }}>Collapse all</button>
+              </div>
+            )}
             {units.map((unit, i) => {
               const unitShots = shotList.filter((s) => s.unitId === unit.id);
+              const text = (unit.textOverlay || unit.script || unit.editingNotes || "").replace(/\s+/g, " ").trim();
+              const named = unitShots.filter((s) => s.description.trim());
+              const summary = [text ? text.slice(0, 60) : "", named.length > 0 ? `${named.filter((s) => s.completed).length}/${named.length} shots` : ""].filter(Boolean).join(" · ");
               return (
-                <UnitCard key={unit.id} index={i} count={units.length} noun={unitNoun} kind={cfg.units} unit={unit} onPatch={patchUnit} onMove={moveUnit} onRemove={removeUnit}>
-                  <ShotGroup label={cfg.units === "slide" ? "Shot list item" : "Shot list items"} shots={unitShots} multi={cfg.units === "beat"} mediaById={mediaById} onPatch={patchShot} onRemove={dropShotFromList} onAdd={() => addShot(unit.id)} onFind={setPickerShotId} />
+                <UnitCard key={unit.id} index={i} count={units.length} noun={unitNoun} kind={cfg.units} unit={unit} open={expanded[unit.id] ?? true} summary={summary} media={media}
+                  onToggle={(id) => setExpanded((m) => ({ ...m, [id]: !(m[id] ?? true) }))} onPatch={patchUnit} onMove={moveUnit} onRemove={removeUnit}>
+                  <ShotGroup label="Shot list items" shots={unitShots} multi mediaById={mediaById} onPatch={patchShot} onRemove={dropShotFromList} onAdd={() => addShot(unit.id)} onFind={setPickerShotId} />
                 </UnitCard>
               );
             })}
@@ -500,7 +599,10 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
           <Section title={cfg.blog ? "Blog post" : cfg.pin ? "Pin" : "Content"}>
             {cfg.blog && (
               <>
-                <Field label="Blog post text"><textarea value={draft.blogText} onChange={(e) => set({ blogText: e.target.value })} rows={10} style={textareaStyle} /></Field>
+                <LinkField label="Blog post document (link)" value={draft.blogDocUrl} onChange={(v) => set({ blogDocUrl: v })} placeholder="Paste the OneDrive link to the blog post file" />
+                {draft.blogText && (
+                  <Field label="Earlier typed text (plain text only; headings and links aren't kept)"><textarea value={draft.blogText} onChange={(e) => set({ blogText: e.target.value })} rows={6} style={textareaStyle} /></Field>
+                )}
                 <Field label="Squarespace categories" hint="Comma separated. Capitals are kept as typed."><CommaTagInput keepCase tags={draft.sqsCategories} onChange={(sqsCategories) => set({ sqsCategories })} placeholder="e.g. Party Planning, Mystery Tips" /></Field>
                 <Field label="Squarespace tags" hint="Comma separated. These are separate from the internal tags below."><CommaTagInput keepCase tags={draft.sqsTags} onChange={(sqsTags) => set({ sqsTags })} placeholder="e.g. murder mystery, hosting" /></Field>
               </>
@@ -523,7 +625,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
                   </div>
                 </Field>
                 <Field label="Alt text"><textarea value={draft.pinAltText} onChange={(e) => set({ pinAltText: e.target.value })} rows={2} style={textareaStyle} placeholder="Describe the image for people who can't see it" /></Field>
-                <Field label="Topics" hint="Up to 10 per pin."><TopicPicker selected={draft.pinTopics} onChange={(pinTopics) => set({ pinTopics })} /></Field>
+                <Field label="Topics" hint="Up to 10 per pin. Tick as many as you like, or add a one-off."><MultiSelectDropdown options={PIN_TOPICS} selected={draft.pinTopics} max={PIN_TOPICS_MAX} allowCustom placeholder="Choose topics…" onChange={(pinTopics) => set({ pinTopics })} /></Field>
                 <Field label="Primary board">
                   <select value={draft.pinBoardPrimary} onChange={(e) => set({ pinBoardPrimary: e.target.value, pinBoardsSecondary: draft.pinBoardsSecondary.filter((b) => b !== e.target.value) })} style={inputStyle}>
                     <option value="">Choose a board…</option>
@@ -531,17 +633,13 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
                   </select>
                 </Field>
                 <Field label="Secondary boards (optional)">
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {PIN_BOARDS.filter((b) => b !== draft.pinBoardPrimary).map((b) => (
-                      <ToggleChip key={b} small active={draft.pinBoardsSecondary.includes(b)} onClick={() => set({ pinBoardsSecondary: draft.pinBoardsSecondary.includes(b) ? draft.pinBoardsSecondary.filter((x) => x !== b) : [...draft.pinBoardsSecondary, b] })}>{b}</ToggleChip>
-                    ))}
-                  </div>
+                  <MultiSelectDropdown options={PIN_BOARDS.filter((b) => b !== draft.pinBoardPrimary)} selected={draft.pinBoardsSecondary} placeholder="Add secondary boards…" onChange={(pinBoardsSecondary) => set({ pinBoardsSecondary })} />
                 </Field>
                 <Field label="Categories / tags" hint="Comma separated"><CommaTagInput tags={draft.pinCategories} onChange={(pinCategories) => set({ pinCategories })} placeholder="e.g. party ideas, murder mystery" /></Field>
               </>
             )}
             <ShotGroup label={cfg.shotLabel} shots={shotList} multi={cfg.shots === "multi"} mediaById={mediaById} onPatch={patchShot} onRemove={dropShotFromList} onAdd={() => addShot(null)} onFind={setPickerShotId} />
-            {cfg.finalLabel && <LinkField label={cfg.finalLabel} value={draft.finalUrl} onChange={(v) => set({ finalUrl: v })} />}
+            {cfg.finalLabel && <FinalMediaField label={cfg.finalLabel.replace(" (link)", "")} mediaId={draft.finalMediaId} legacyUrl={draft.finalUrl} media={media} pickType={draft.postType === "Pinterest pin" ? "" : "photo"} onPick={(id) => set({ finalMediaId: id })} onClearLegacy={() => set({ finalUrl: "" })} />}
             {cfg.blog && <Field label="Cross-reference links to add after publishing" hint="Posts or pages to link to once this is live"><textarea value={draft.crossLinks} onChange={(e) => set({ crossLinks: e.target.value })} rows={3} style={textareaStyle} /></Field>}
             {cfg.attachments && (
               <Field label="Attachments (links)">
@@ -559,7 +657,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
         )}
 
         {/* ---- Reel: one final video per reel ---- */}
-        {cfg.units && cfg.finalLabel && <LinkField label={cfg.finalLabel} value={draft.finalUrl} onChange={(v) => set({ finalUrl: v })} />}
+        {cfg.units && cfg.finalLabel && <FinalMediaField label={cfg.finalLabel.replace(" (link)", "")} mediaId={draft.finalMediaId} legacyUrl={draft.finalUrl} media={media} pickType="video" onPick={(id) => set({ finalMediaId: id })} onClearLegacy={() => set({ finalUrl: "" })} />}
 
         {(showCaption || showSeeders) && (
           <Section title="Caption & seeder comments">
@@ -618,6 +716,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
             initialSelected={shot.mediaIds}
             requirements={{ mediaType: shot.mediaType, people: shot.people, tags: shot.tags }}
             shotLabel={shot.description}
+            allowAi={draft.aiImagesAllowed}
             onClose={() => setPickerShotId(null)}
             onConfirm={(ids) => {
               const hadLinks = shot.mediaIds.length > 0;

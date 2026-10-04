@@ -27,7 +27,7 @@ function ToggleChip({ active, onClick, children, color }) {
 }
 
 const blankDraft = () => ({
-  id: uid(), title: "", mediaType: "photo", assetKind: "raw", postFormat: "", sourceUrl: "", fileName: "",
+  id: uid(), title: "", mediaType: "photo", assetKind: "raw", isAi: false, postFormat: "", sourceUrl: "", fileName: "",
   onedriveItemId: "", thumbnailUrl: "", thumbnailPath: "", people: [], tags: [], shotDate: "", notes: "",
 });
 
@@ -156,6 +156,10 @@ export default function MediaForm({ item, currentUser, tagSuggestions, onSave, o
             </div>
           )}
         </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!draft.isAi} onChange={(e) => set({ isAi: e.target.checked })} style={{ width: 17, height: 17, accentColor: STYLES.wax }} /> AI-generated
+        </label>
 
         <Field label="Who's in it">
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

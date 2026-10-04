@@ -7,7 +7,7 @@ export const ASSET_KINDS = [
   { value: "finished", label: "Finished post" },
 ];
 export const POST_FORMATS = ["Reel", "Carousel", "Image post", "Story", "Pinterest pin", "Blog thumbnail", "Other"];
-export const MEDIA_PEOPLE = ["Cathy", "Evan", "Product", "Text only", "Other"];
+export const MEDIA_PEOPLE = ["Cathy", "Evan", "Product", "Food/Cocktail", "Text only", "Other"];
 
 // Tags are stored lowercase and trimmed so "Flatlay" and "flatlay " can't become two tags.
 export function normalizeTag(t) {
@@ -142,3 +142,18 @@ export const METRICS_BY_TYPE = {
   "Pinterest pin": { groups: [{ title: "Pinterest", fields: PIN }, { title: "Video pins only", fields: PIN_VIDEO }] },
   "Blog post": { groups: [{ title: "Blog", fields: [{ key: "page_views_30d", label: "Page views (30 days)" }] }], keywords: true },
 };
+
+// ---- Colors ----
+// Posts are colored by TYPE (the format); the status chips keep their own stage colors.
+export const TYPE_COLOR = {
+  Reel: "#B5446E",
+  Carousel: "#2F6F8F",
+  "Image post": "#7A5C99",
+  Story: "#D17A22",
+  "Pinterest pin": "#C0392B",
+  "Blog post": "#4B7F52",
+  Other: "#6B7280",
+};
+export const typeColor = (postType) => TYPE_COLOR[postType] || TYPE_COLOR.Other;
+// Calendar text color by status: scheduled/live green; drafted/edited/ready to post blue; idea/planned/filmed orange.
+export const STATUS_TEXT_COLOR = { scheduled: "#2E7D32", live: "#2E7D32", drafted: "#1F5FBF", edited: "#1F5FBF", ready_to_post: "#1F5FBF", idea: "#C26A00", planned: "#C26A00", filmed: "#C26A00" };

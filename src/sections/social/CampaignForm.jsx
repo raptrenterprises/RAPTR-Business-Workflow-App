@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, Trash2, Plus, Unlink } from "lucide-react";
 import { STYLES, uid, selectStyle, formatClockTime } from "../../constants";
-import { STATUS_LABEL, STATUS_COLOR, formatPostDate } from "./socialConstants";
+import { STATUS_LABEL, STATUS_COLOR, formatPostDate, typeColor } from "./socialConstants";
 
 const inputStyle = { ...selectStyle(), width: "100%", boxSizing: "border-box", fontSize: 14, padding: "8px 10px" };
 const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, color: STYLES.slate, marginBottom: 4 };
@@ -62,7 +62,7 @@ export default function CampaignForm({ campaign, posts, allPosts, currentUser, o
             {posts.map((p) => {
               const c = STATUS_COLOR[p.status];
               return (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: "7px 10px", marginBottom: 6 }}>
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: `1px solid ${STYLES.ink}22`, borderLeft: `4px solid ${typeColor(p.postType)}`, borderRadius: 6, padding: "7px 10px", marginBottom: 6 }}>
                   <div onClick={() => onOpenPost(p)} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, wordBreak: "break-word" }}>{p.title}</div>
                     <div style={{ fontSize: 12, color: STYLES.slate }}>{p.postType}{p.publishDate ? ` · ${formatPostDate(p.publishDate)}${p.publishTime ? ` ${formatClockTime(p.publishTime)}` : ""}` : ""}</div>

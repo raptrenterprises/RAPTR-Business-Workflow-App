@@ -17,8 +17,11 @@ function postFromRow(r) {
     seederCathy: r.seeder_cathy || "",
     seederCathyReply: r.seeder_cathy_reply || "",
     textOverlay: r.text_overlay || "",
-    finalUrl: r.final_url || "",
-    blogText: r.blog_text || "",
+    finalUrl: r.final_url || "", // legacy pasted link; the final media is now picked from the library
+    finalMediaId: r.final_media_id || "",
+    aiImagesAllowed: !!r.ai_images_allowed,
+    blogText: r.blog_text || "", // legacy typed-in text
+    blogDocUrl: r.blog_doc_url || "",
     sqsCategories: r.sqs_categories || [],
     sqsTags: r.sqs_tags || [],
     crossLinks: r.cross_links || "",
@@ -63,7 +66,10 @@ function postToRow(p) {
     seeder_cathy_reply: p.seederCathyReply || null,
     text_overlay: p.textOverlay || null,
     final_url: p.finalUrl || null,
+    final_media_id: p.finalMediaId || null,
+    ai_images_allowed: !!p.aiImagesAllowed,
     blog_text: p.blogText || null,
+    blog_doc_url: p.blogDocUrl || null,
     sqs_categories: p.sqsCategories || [],
     sqs_tags: p.sqsTags || [],
     cross_links: p.crossLinks || null,
@@ -93,7 +99,7 @@ function keywordFromRow(r) {
 }
 
 function unitFromRow(r) {
-  return { id: r.id, postId: r.post_id, sortOrder: r.sort_order || 0, textOverlay: r.text_overlay || "", script: r.script || "", editingNotes: r.editing_notes || "", finalUrl: r.final_url || "" };
+  return { id: r.id, postId: r.post_id, sortOrder: r.sort_order || 0, textOverlay: r.text_overlay || "", script: r.script || "", editingNotes: r.editing_notes || "", finalUrl: r.final_url || "", finalMediaId: r.final_media_id || "" };
 }
 
 function shotFromRow(r) {
@@ -171,7 +177,7 @@ export async function savePost(post, units, shots, removed, isNew, originalLinks
     if (error) throw error;
   }
   if (units.length > 0) {
-    const rows = units.map((u, i) => ({ id: u.id, post_id: post.id, sort_order: i, text_overlay: u.textOverlay || null, script: u.script || null, editing_notes: u.editingNotes || null, final_url: u.finalUrl || null }));
+    const rows = units.map((u, i) => ({ id: u.id, post_id: post.id, sort_order: i, text_overlay: u.textOverlay || null, script: u.script || null, editing_notes: u.editingNotes || null, final_url: u.finalUrl || null, final_media_id: u.finalMediaId || null }));
     const { error } = await supabase.from("post_units").upsert(rows);
     if (error) throw error;
   }
@@ -225,6 +231,12 @@ export async function savePost(post, units, shots, removed, isNew, originalLinks
 
 export async function setPostStatus(id, status) {
   const { error } = await supabase.from("posts").update({ status }).eq("id", id);
+  if (error) throw error;
+}
+
+// Moves a post to another day. The time is left exactly as it was.
+export async function setPostDate(id, publishDate) {
+  const { error } = await supabase.from("posts").update({ publish_date: publishDate }).eq("id", id);
   if (error) throw error;
 }
 

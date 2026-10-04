@@ -176,7 +176,7 @@ function TasksCard({ tasks, onNavigate }) {
 function PostsToScheduleCard({ posts, onNavigate, onOpenPost }) {
   const today = todayStr();
   return (
-    <CardShell icon={<Megaphone size={18} color={STYLES.wax} />} title="Posts to schedule" onNavigate={onNavigate} section="social">
+    <CardShell icon={<Megaphone size={18} color={STYLES.wax} />} title="Upcoming social posts" onNavigate={onNavigate} section="social">
       {posts.length === 0 ? (
         <EmptyRow>Everything due in the next week is scheduled.</EmptyRow>
       ) : (

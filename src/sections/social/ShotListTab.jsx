@@ -267,6 +267,7 @@ export default function ShotListTab({ posts, shots, units = [], campaigns, media
           initialSelected={linksByShot[pickerShot.id] || []}
           requirements={{ mediaType: pickerShot.mediaType, people: pickerShot.people, tags: pickerShot.tags }}
           shotLabel={pickerShot.description}
+          allowAi={!!postById[pickerShot.postId]?.aiImagesAllowed}
           onClose={() => setPickerShot(null)}
           onConfirm={(ids) => { onSetShotMedia(pickerShot.id, ids, linksByShot[pickerShot.id] || []); setPickerShot(null); }}
         />

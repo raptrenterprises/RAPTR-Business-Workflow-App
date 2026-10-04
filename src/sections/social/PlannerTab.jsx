@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Plus, Search, ChevronRight, ChevronDown } from "lucide-react";
 import { STYLES, selectStyle, formatClockTime } from "../../constants";
 import { EmptyMsg } from "../../components/Shared";
-import { POST_TYPES, STATUS_LABEL, STATUS_COLOR, nextStatuses, formatPostDate } from "./socialConstants";
+import { POST_TYPES, STATUS_LABEL, STATUS_COLOR, nextStatuses, formatPostDate, typeColor } from "./socialConstants";
 
 const ALL_STATUSES = ["idea", "planned", "filmed", "drafted", "edited", "scheduled", "ready_to_post", "live"];
 
@@ -15,11 +15,11 @@ function PostCard({ post, shotCount, shotDone, campaignName, onOpen, onAdvance }
   const nexts = nextStatuses(post.postType, post.status);
   const when = post.publishDate ? `${formatPostDate(post.publishDate)}${post.publishTime ? ` · ${formatClockTime(post.publishTime)}` : ""}` : "No date yet";
   return (
-    <div onClick={() => onOpen(post)} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderLeft: `4px solid ${STATUS_COLOR[post.status] || STYLES.slate}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+    <div onClick={() => onOpen(post)} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderLeft: `5px solid ${typeColor(post.postType)}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
       <div style={{ flex: "1 1 220px", minWidth: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 600, wordBreak: "break-word" }}>{post.title}</div>
         <div style={{ fontSize: 12.5, color: STYLES.slate, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <span>{post.postType}</span>
+          <span style={{ color: typeColor(post.postType), fontWeight: 700 }}>{post.postType}</span>
           <span>{when}</span>
           {campaignName && <span style={{ color: STYLES.purple }}>{campaignName}</span>}
           {shotCount > 0 && <span>{shotDone}/{shotCount} shots</span>}
@@ -48,7 +48,7 @@ export default function PlannerTab({ posts, shots, campaigns, onOpenPost, onAdva
   const [typeFilter, setTypeFilter] = useState("all");
   const [campaignFilter, setCampaignFilter] = useState("all");
   const [showLive, setShowLive] = useState(false);
-  const [showIdeas, setShowIdeas] = useState(false);
+  const [showUnscheduled, setShowUnscheduled] = useState(false);
 
   const campaignName = useMemo(() => Object.fromEntries(campaigns.map((c) => [c.id, c.name])), [campaigns]);
   const shotStats = useMemo(() => {
@@ -68,10 +68,11 @@ export default function PlannerTab({ posts, shots, campaigns, onOpenPost, onAdva
     }).sort(sortByDate);
   }, [posts, search, statusFilter, typeFilter, campaignFilter]);
 
-  const active = filtered.filter((p) => p.status !== "live" && p.status !== "idea");
-  const ideas = filtered.filter((p) => p.status === "idea");
-  const live = filtered.filter((p) => p.status === "live");
-  const ideasVisible = showIdeas || statusFilter.includes("idea");
+  // Anything without a date goes in "Unscheduled", whatever its stage. Dated posts stay in the main list (ideas included), with Live ones tucked away.
+  const unscheduled = filtered.filter((p) => !p.publishDate);
+  const active = filtered.filter((p) => p.publishDate && p.status !== "live");
+  const live = filtered.filter((p) => p.publishDate && p.status === "live");
+  const unscheduledVisible = showUnscheduled;
   const liveVisible = showLive || statusFilter.includes("live");
   const toggleStatus = (s) => setStatusFilter((list) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s]));
   const filtersActive = search || statusFilter.length > 0 || typeFilter !== "all" || campaignFilter !== "all";
@@ -114,14 +115,14 @@ export default function PlannerTab({ posts, shots, campaigns, onOpenPost, onAdva
       ) : (
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {active.length === 0 ? <EmptyMsg>Nothing in progress right now.</EmptyMsg> : active.map(renderCard)}
+            {active.length === 0 ? <EmptyMsg>Nothing with a date right now.</EmptyMsg> : active.map(renderCard)}
           </div>
-          {ideas.length > 0 && (
+          {unscheduled.length > 0 && (
             <div style={{ marginTop: 20 }}>
-              <button onClick={() => setShowIdeas(!showIdeas)} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, fontSize: 13.5, display: "flex", alignItems: "center", gap: 4, padding: 0, marginBottom: 8 }}>
-                {ideasVisible ? <ChevronDown size={15} /> : <ChevronRight size={15} />} Ideas ({ideas.length})
+              <button onClick={() => setShowUnscheduled(!showUnscheduled)} style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, fontSize: 13.5, display: "flex", alignItems: "center", gap: 4, padding: 0, marginBottom: 8 }}>
+                {unscheduledVisible ? <ChevronDown size={15} /> : <ChevronRight size={15} />} Unscheduled ({unscheduled.length})
               </button>
-              {ideasVisible && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{ideas.map(renderCard)}</div>}
+              {unscheduledVisible && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{unscheduled.map(renderCard)}</div>}
             </div>
           )}
           {live.length > 0 && (

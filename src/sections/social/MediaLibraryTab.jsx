@@ -25,6 +25,7 @@ function MediaCard({ item, onOpen }) {
         <span style={{ position: "absolute", top: 6, left: 6, background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 11, padding: "2px 7px", borderRadius: 10, display: "flex", alignItems: "center", gap: 4 }}>
           <Icon size={11} /> {item.assetKind === "finished" ? item.postFormat || "Finished" : item.mediaType === "video" ? "Video" : "Photo"}
         </span>
+        {item.isAi && <span style={{ position: "absolute", bottom: 6, left: 6, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 8 }}>AI</span>}
         {item.sourceUrl && (
           <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label="Open in OneDrive" style={{ position: "absolute", top: 6, right: 6, background: "rgba(255,255,255,0.9)", color: STYLES.ink, borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <ExternalLink size={12} />
@@ -53,6 +54,7 @@ export default function MediaLibraryTab({ currentUser }) {
   const [typeFilter, setTypeFilter] = useState("all");
   const [kindFilter, setKindFilter] = useState("all");
   const [formatFilter, setFormatFilter] = useState("all");
+  const [aiFilter, setAiFilter] = useState("all");
   const [peopleFilter, setPeopleFilter] = useState([]);
   const [tagFilter, setTagFilter] = useState([]);
 
@@ -79,15 +81,17 @@ export default function MediaLibraryTab({ currentUser }) {
       if (typeFilter !== "all" && i.mediaType !== typeFilter) return false;
       if (kindFilter !== "all" && i.assetKind !== kindFilter) return false;
       if (formatFilter !== "all" && i.postFormat !== formatFilter) return false;
+      if (aiFilter === "ai" && !i.isAi) return false;
+      if (aiFilter === "real" && i.isAi) return false;
       if (!peopleFilter.every((p) => i.people.includes(p))) return false;
       if (!tagFilter.every((t) => i.tags.includes(t))) return false;
       if (q && !`${i.title} ${i.fileName} ${i.notes} ${i.tags.join(" ")}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [items, search, typeFilter, kindFilter, formatFilter, peopleFilter, tagFilter]);
+  }, [items, search, typeFilter, kindFilter, formatFilter, aiFilter, peopleFilter, tagFilter]);
 
-  const filtersActive = search || typeFilter !== "all" || kindFilter !== "all" || formatFilter !== "all" || peopleFilter.length > 0 || tagFilter.length > 0;
-  const clearFilters = () => { setSearch(""); setTypeFilter("all"); setKindFilter("all"); setFormatFilter("all"); setPeopleFilter([]); setTagFilter([]); };
+  const filtersActive = search || typeFilter !== "all" || kindFilter !== "all" || formatFilter !== "all" || aiFilter !== "all" || peopleFilter.length > 0 || tagFilter.length > 0;
+  const clearFilters = () => { setSearch(""); setTypeFilter("all"); setKindFilter("all"); setFormatFilter("all"); setAiFilter("all"); setPeopleFilter([]); setTagFilter([]); };
   const toggleIn = (list, setList, v) => setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   async function handleSave(data, isNew) {
@@ -130,6 +134,11 @@ export default function MediaLibraryTab({ currentUser }) {
           <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} style={selectStyle()}>
             <option value="all">Raw &amp; finished</option>
             {ASSET_KINDS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select value={aiFilter} onChange={(e) => setAiFilter(e.target.value)} style={selectStyle()}>
+            <option value="all">AI &amp; not AI</option>
+            <option value="ai">AI only</option>
+            <option value="real">Not AI</option>
           </select>
           {kindFilter !== "raw" && (
             <select value={formatFilter} onChange={(e) => setFormatFilter(e.target.value)} style={selectStyle()}>

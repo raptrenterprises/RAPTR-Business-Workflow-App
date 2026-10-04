@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { Images, CalendarRange, Layers, ListChecks } from "lucide-react";
-import { STYLES, uid } from "../../constants";
+import { Images, CalendarRange, CalendarDays, Layers, ListChecks } from "lucide-react";
+import { STYLES, uid, todayStr } from "../../constants";
 import { TabButton, CenterMsg, ErrorBar } from "../../components/Shared";
-import { savePost, setPostStatus, setPostCampaign, deletePostRow, setShotCompleted, setShotMediaLinks, insertCampaign, updateCampaign, deleteCampaignRow } from "../../lib/postsApi";
+import { savePost, setPostStatus, setPostCampaign, deletePostRow, setPostDate, setShotCompleted, setShotMediaLinks, insertCampaign, updateCampaign, deleteCampaignRow } from "../../lib/postsApi";
 import { isOnCalendarStatus } from "./socialConstants";
 import useSocialData from "./useSocialData";
 import MediaLibraryTab from "./MediaLibraryTab";
 import PlannerTab from "./PlannerTab";
+import PostCalendarTab from "./PostCalendarTab";
 import CampaignsTab from "./CampaignsTab";
 import ShotListTab from "./ShotListTab";
 import PostForm from "./PostForm";
@@ -14,6 +15,7 @@ import CampaignForm from "./CampaignForm";
 
 const SUBTABS = [
   { key: "planner", label: "Planner", icon: <CalendarRange size={14} /> },
+  { key: "calendar", label: "Calendar", icon: <CalendarDays size={14} /> },
   { key: "shots", label: "Shot List", icon: <ListChecks size={14} /> },
   { key: "campaigns", label: "Campaigns", icon: <Layers size={14} /> },
   { key: "library", label: "Media Library", icon: <Images size={14} /> },
@@ -57,6 +59,16 @@ export default function SocialSection({ currentUser, openPostId, onOpenPostHandl
     run(() => setPostStatus(post.id, next), "Couldn't update the status");
   };
 
+  async function handleMovePost(post, day) {
+    // A scheduled post moved to a time that has already passed goes Live on the next check.
+    if (post.status === "scheduled" && post.publishTime) {
+      const today = todayStr();
+      const nowET = new Date().toLocaleTimeString("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" });
+      if ((day < today || (day === today && post.publishTime <= nowET)) && !window.confirm(`"${post.title}" is Scheduled, and that time has already passed, so it will be marked Live within a few minutes. Move it anyway?`)) return;
+    }
+    await run(() => setPostDate(post.id, day), "Couldn't move the post");
+  }
+
   const handleToggleShot = (shot, completed) => run(() => setShotCompleted(shot.id, completed), "Couldn't update the shot");
   const handleSetShotMedia = (shotId, mediaIds, previousIds) => run(() => setShotMediaLinks(shotId, mediaIds, previousIds), "Couldn't update the linked media");
 
@@ -86,6 +98,9 @@ export default function SocialSection({ currentUser, openPostId, onOpenPostHandl
 
       {subtab === "planner" && !loading && (
         <PlannerTab posts={posts} shots={shots} campaigns={campaigns} onOpenPost={(post) => setPostEditor({ post })} onAdvance={handleAdvance} />
+      )}
+      {subtab === "calendar" && !loading && (
+        <PostCalendarTab posts={posts} onOpenPost={(post) => setPostEditor({ post })} onMovePost={handleMovePost} />
       )}
       {subtab === "shots" && !loading && (
         <ShotListTab posts={posts} shots={shots} units={units} campaigns={campaigns} media={media} shotMedia={shotMedia} onOpenPost={(post) => setPostEditor({ post })} onToggleShot={handleToggleShot} onSetShotMedia={handleSetShotMedia} />
