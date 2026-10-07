@@ -48,6 +48,8 @@ function TaskCard({
             mode={editDraft.urgencyMode} setMode={(m) => setEditDraft({ ...editDraft, urgencyMode: m })}
             urgency={editDraft.urgency} setUrgency={(v) => setEditDraft({ ...editDraft, urgency: v })}
             dueDate={editDraft.dueDate} setDueDate={(v) => setEditDraft({ ...editDraft, dueDate: v })}
+            onRestart={() => setEditDraft({ ...editDraft, urgencyRestart: true })} restarted={!!editDraft.urgencyRestart}
+            meetNote={t.meetDate && !editDraft.dueDate ? `Follows the RAPTRMeet date (${new Date(t.meetDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })})` : ""}
           />
           <ImportanceSelect value={editDraft.importance} onChange={(v) => setEditDraft({ ...editDraft, importance: v })} />
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
@@ -245,7 +247,12 @@ export default function TasksSection({ currentUser, users, onOpenPost }) {
     setEditingId(task.id);
     setEditDraft({
       title: task.title, owner: task.owner, importance: task.importance,
-      urgency: task.urgency || "Medium",
+      // Show the urgency it has right now (not the stored starting level), so picking a different
+      // level here is a real change that restarts its timeline.
+      urgency: task.dueDate ? (task.urgency || "Medium") : effectiveUrgency(task),
+      urgencyStart: task.dueDate ? "" : effectiveUrgency(task),
+      urgencyRestart: false,
+      hadDueDate: !!task.dueDate,
       urgencyMode: task.dueDate ? "dueDate" : "urgency",
       dueDate: task.dueDate || "",
       recurrence: task.recurrence || "none",
@@ -260,10 +267,18 @@ export default function TasksSection({ currentUser, users, onOpenPost }) {
     const title = editDraft.title.trim();
     if (!title) return;
     const usingDueDate = editDraft.urgencyMode === "dueDate" && editDraft.dueDate;
+    // Only touch the urgency when it was actually changed (or a restart was asked for, or it is newly
+    // switching from a due date). Any of those starts its timeline over from today; otherwise an
+    // unchanged save leaves the stored urgency and its clock exactly as they were.
+    const urgencyPatch = usingDueDate
+      ? { urgency: null }
+      : (editDraft.urgency !== editDraft.urgencyStart || editDraft.urgencyRestart || editDraft.hadDueDate)
+        ? { urgency: editDraft.urgency, urgencySetAt: new Date().toISOString() }
+        : {};
     try {
       await updateTask(id, {
         title, owner: editDraft.owner, importance: editDraft.importance,
-        urgency: usingDueDate ? null : editDraft.urgency,
+        ...urgencyPatch,
         dueDate: usingDueDate ? editDraft.dueDate : null,
         recurrence: editDraft.recurrence,
         tags: editDraft.tags || [],

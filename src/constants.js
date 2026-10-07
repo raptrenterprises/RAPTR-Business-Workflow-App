@@ -43,10 +43,10 @@ export const URGENCY_LEVELS = ["N/A", "Low", "Medium", "High", "Immediate"];
 export const URGENCY_WEIGHT = { "N/A": 0, Low: 1, Medium: 2, High: 3, Immediate: 4 };
 export const URGENCY_LEGEND = {
   Immediate: "Today.",
-  High: "1–3 days.",
-  Medium: "Within a week.",
-  Low: "Within a month.",
-  "N/A": "Eventually — no timeline.",
+  High: "Within a week.",
+  Medium: "Within a month.",
+  Low: "Within 3 months.",
+  "N/A": "Eventually, with no timeline (or more than 3 months away).",
 };
 
 // Explicit priority ranking (urgency/importance), lower index = higher priority.
@@ -163,46 +163,44 @@ export function daysBetween(fromStr, toStr) {
   return Math.round((to - from) / 86400000);
 }
 
-// Auto-escalates a manually-set urgency over time. Only Low and Medium
-// escalate; High, Immediate, and N/A are left as-is (no rule was given
-// for further escalating those).
-//   Low    -> Medium at 3 weeks (21 days) old
-//   Medium -> High 4 days after entering Medium (so a Low item that became
-//             Medium at day 21 becomes High at day 25; an item that started
-//             at Medium becomes High at day 4)
-export function escalateUrgency(baseUrgency, createdAt) {
-  if (baseUrgency !== "Low" && baseUrgency !== "Medium") return baseUrgency || "Medium";
-  const age = daysBetween(createdAt, todayStr());
-  if (baseUrgency === "Low") {
-    if (age >= 25) return "High";
-    if (age >= 21) return "Medium";
-    return "Low";
-  }
-  return age >= 4 ? "High" : "Medium"; // Medium
+// ---- How urgent something is right now ----
+// Everything is measured in days until an "urgency date":
+//   today or overdue -> Immediate    1-7 days -> High    8-30 days -> Medium
+//   31-90 days       -> Low          91+ days -> N/A (eventually / no timeline)
+export function urgencyFromDays(days) {
+  if (days <= 0) return "Immediate";
+  if (days <= 7) return "High";
+  if (days <= 30) return "Medium";
+  if (days <= 90) return "Low";
+  return "N/A";
 }
 
-// Derives urgency from how far away a due date is.
-//   due today or overdue -> Immediate
-//   1–3 days away        -> High
-//   4–7 days away         -> Medium
-//   8+ days away          -> Low
-// (Nothing beyond 30 days was specified as its own tier, so anything
-// further out than a week just stays at Low rather than being marked N/A —
-// N/A is reserved for items with no due date and no timeline at all.)
+// Derives urgency from how far away a date is (a due date, or a RAPTRMeet's date).
 export function urgencyFromDueDate(dueDate) {
-  const days = daysBetween(todayStr(), dueDate);
-  if (days <= 0) return "Immediate";
-  if (days <= 3) return "High";
-  if (days <= 7) return "Medium";
-  return "Low";
+  return urgencyFromDays(daysBetween(todayStr(), dueDate));
+}
+
+// A manually set urgency counts down from the day it was set, using the same scale:
+// Low = 90 days, Medium = 30, High = 7, Immediate = today. So a Low item becomes Medium
+// with a month left and High with a week left; Immediate and N/A never change on their own.
+// Changing the urgency (or restarting its timeline) sets "setAt" to now and starts over.
+export const URGENCY_HORIZON_DAYS = { Immediate: 0, High: 7, Medium: 30, Low: 90 };
+export function escalateUrgency(baseUrgency, setAt) {
+  const base = baseUrgency || "Medium";
+  if (base === "N/A") return "N/A";
+  const horizon = base in URGENCY_HORIZON_DAYS ? URGENCY_HORIZON_DAYS[base] : URGENCY_HORIZON_DAYS.Medium;
+  return urgencyFromDays(horizon - daysBetween(setAt, todayStr()));
 }
 
 // The single source of truth for "what urgency is this right now" —
 // use this everywhere urgency is displayed, sorted, or filtered.
-// Due date always wins if present; otherwise the stored urgency escalates with age.
+// 1) a due date wins; 2) otherwise a task tied to a RAPTRMeet follows that meet's date
+// (item.meetDate, filled in when tasks are loaded); 3) otherwise the manual urgency counts
+// down from when it was last set (item.urgencySetAt, falling back to when it was created).
 export function effectiveUrgency(item) {
   if (item.dueDate) return urgencyFromDueDate(item.dueDate);
-  return escalateUrgency(item.urgency, item.createdAt);
+  if (item.meetDate) return urgencyFromDueDate(item.meetDate);
+  return escalateUrgency(item.urgency, item.urgencySetAt || item.createdAt);
 }
 
 // Sorts highest-priority first, using the same rank table as everywhere else.

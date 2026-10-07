@@ -8,15 +8,16 @@ const ALL_STATUSES = ["idea", "planned", "filmed", "drafted", "edited", "schedul
 
 function StatusPill({ status }) {
   const c = STATUS_COLOR[status] || STYLES.slate;
-  return <span style={{ fontSize: 11.5, fontWeight: 700, color: c, border: `1px solid ${c}66`, background: `${c}14`, padding: "2px 9px", borderRadius: 10, whiteSpace: "nowrap" }}>{STATUS_LABEL[status] || status}</span>;
+  // Long names like "Ready to manually post" wrap onto two lines instead of pushing the chip out of place.
+  return <span style={{ fontSize: 11.5, fontWeight: 700, color: c, border: `1px solid ${c}66`, background: `${c}14`, padding: "2px 9px", borderRadius: 10, whiteSpace: "normal", textAlign: "center", lineHeight: 1.25, display: "inline-block" }}>{STATUS_LABEL[status] || status}</span>;
 }
 
 function PostCard({ post, shotCount, shotDone, campaignName, onOpen, onAdvance }) {
   const nexts = nextStatuses(post.postType, post.status);
   const when = post.publishDate ? `${formatPostDate(post.publishDate)}${post.publishTime ? ` · ${formatClockTime(post.publishTime)}` : ""}` : "No date yet";
   return (
-    <div onClick={() => onOpen(post)} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderLeft: `5px solid ${typeColor(post.postType)}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-      <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+    <div onClick={() => onOpen(post)} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderLeft: `5px solid ${typeColor(post.postType)}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "nowrap" }}>
+      <div style={{ flex: "1 1 0", minWidth: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 600, wordBreak: "break-word" }}>{post.title}</div>
         <div style={{ fontSize: 12.5, color: STYLES.slate, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
           <span style={{ color: typeColor(post.postType), fontWeight: 700 }}>{post.postType}</span>
@@ -25,12 +26,14 @@ function PostCard({ post, shotCount, shotDone, campaignName, onOpen, onAdvance }
           {shotCount > 0 && <span>{shotDone}/{shotCount} shots</span>}
         </div>
       </div>
-      <StatusPill status={post.status} />
-      {nexts.map((n) => (
-        <button key={n} onClick={(e) => { e.stopPropagation(); onAdvance(post, n); }} style={{ ...selectStyle(), cursor: "pointer", display: "flex", alignItems: "center", gap: 3, color: STATUS_COLOR[n], fontWeight: 600 }}>
-          {STATUS_LABEL[n]} <ChevronRight size={13} />
-        </button>
-      ))}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, maxWidth: 124 }}>
+        <StatusPill status={post.status} />
+        {nexts.map((n) => (
+          <button key={n} onClick={(e) => { e.stopPropagation(); onAdvance(post, n); }} style={{ ...selectStyle(), cursor: "pointer", display: "flex", alignItems: "center", gap: 3, color: STATUS_COLOR[n], fontWeight: 600, textAlign: "right", lineHeight: 1.2 }}>
+            {STATUS_LABEL[n]} <ChevronRight size={13} style={{ flexShrink: 0 }} />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

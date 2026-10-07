@@ -9,6 +9,7 @@ function fromRow(r) {
     createdAt: r.created_at,
     importance: r.importance,
     urgency: r.urgency,
+    urgencySetAt: r.urgency_set_at || null,
     status: r.status,
     turn: r.turn,
     seenBy: r.seen_by || [],
@@ -48,6 +49,7 @@ export async function updateThread(id, patch) {
   if ("title" in patch) dbPatch.title = patch.title;
   if ("importance" in patch) dbPatch.importance = patch.importance;
   if ("urgency" in patch) dbPatch.urgency = patch.urgency;
+  if ("urgencySetAt" in patch) dbPatch.urgency_set_at = patch.urgencySetAt;
   if ("status" in patch) dbPatch.status = patch.status;
   if ("turn" in patch) dbPatch.turn = patch.turn;
   if ("seenBy" in patch) dbPatch.seen_by = patch.seenBy;

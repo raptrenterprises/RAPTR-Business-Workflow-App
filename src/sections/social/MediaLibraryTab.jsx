@@ -1,11 +1,14 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Plus, Image as ImageIcon, Video, ExternalLink, Search } from "lucide-react";
+import { Plus, Image as ImageIcon, Video, ExternalLink, Search, Layers, Settings } from "lucide-react";
 import { STYLES, selectStyle } from "../../constants";
 import { CenterMsg, EmptyMsg, ErrorBar } from "../../components/Shared";
-import { fetchMedia, insertMedia, updateMedia, deleteMediaRow, subscribeMedia } from "../../lib/mediaApi";
+import { fetchMedia, insertMedia, updateMedia, deleteMediaRow, subscribeMedia, fetchLocations, subscribeLocations } from "../../lib/mediaApi";
+import { resolveMediaUrl, linksToExactFile, mediaPath } from "../../lib/mediaLinks";
 import { deleteAttachment } from "../../lib/storageApi";
 import { MEDIA_TYPES, ASSET_KINDS, POST_FORMATS, MEDIA_PEOPLE } from "./socialConstants";
 import MediaForm from "./MediaForm";
+import BulkAddModal from "./BulkAddModal";
+import StorageLocationsForm from "./StorageLocationsForm";
 
 function FilterChip({ active, onClick, children, color }) {
   const c = color || STYLES.wax;
@@ -16,8 +19,9 @@ function FilterChip({ active, onClick, children, color }) {
   );
 }
 
-function MediaCard({ item, onOpen }) {
+function MediaCard({ item, locations, onOpen }) {
   const Icon = item.mediaType === "video" ? Video : ImageIcon;
+  const link = resolveMediaUrl(item, locations);
   return (
     <div onClick={() => onOpen(item)} style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, overflow: "hidden", cursor: "pointer", display: "flex", flexDirection: "column" }}>
       <div style={{ position: "relative", aspectRatio: "1 / 1", background: STYLES.gray, display: "flex", alignItems: "center", justifyContent: "center", color: STYLES.slate }}>
@@ -26,14 +30,15 @@ function MediaCard({ item, onOpen }) {
           <Icon size={11} /> {item.assetKind === "finished" ? item.postFormat || "Finished" : item.mediaType === "video" ? "Video" : "Photo"}
         </span>
         {item.isAi && <span style={{ position: "absolute", bottom: 6, left: 6, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 8 }}>AI</span>}
-        {item.sourceUrl && (
-          <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label="Open in OneDrive" style={{ position: "absolute", top: 6, right: 6, background: "rgba(255,255,255,0.9)", color: STYLES.ink, borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {link && (
+          <a href={link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label={linksToExactFile(item, locations) ? "Open the file" : "Open the folder"} title={linksToExactFile(item, locations) ? "Open the file" : "Open the folder"} style={{ position: "absolute", top: 6, right: 6, background: "rgba(255,255,255,0.9)", color: STYLES.ink, borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <ExternalLink size={12} />
           </a>
         )}
       </div>
       <div style={{ padding: "8px 10px" }}>
         <div style={{ fontSize: 13, fontWeight: 600, wordBreak: "break-word" }}>{item.title}</div>
+        {(item.fileName || item.mediaNumber) && <div title={mediaPath(item)} style={{ fontSize: 10.5, color: STYLES.slate, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.mediaNumber ? `#${item.mediaNumber}` : ""}{item.mediaNumber && item.fileName ? " · " : ""}{item.fileName ? mediaPath(item) : ""}</div>}
         {(item.people.length > 0 || item.tags.length > 0) && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
             {item.people.map((p) => <span key={p} style={{ fontSize: 11, color: STYLES.blue, border: `1px solid ${STYLES.blue}55`, background: `${STYLES.blue}14`, borderRadius: 10, padding: "1px 7px" }}>{p}</span>)}
@@ -50,6 +55,10 @@ export default function MediaLibraryTab({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null); // null | "new" | item
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [locationsOpen, setLocationsOpen] = useState(false);
+  const [locations, setLocations] = useState({ raw: { baseUrl: "", linkStyle: "folder" }, edited: { baseUrl: "", linkStyle: "folder" } });
+  const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [kindFilter, setKindFilter] = useState("all");
@@ -62,10 +71,16 @@ export default function MediaLibraryTab({ currentUser }) {
     try { setItems(await fetchMedia()); setError(""); } catch (e) { setError("Couldn't load the media library: " + e.message); }
   }, []);
 
+  const reloadLocations = useCallback(async () => {
+    try { setLocations(await fetchLocations()); } catch (e) { setError("Couldn't load storage locations: " + e.message); }
+  }, []);
+
   useEffect(() => {
-    reload().finally(() => setLoading(false));
-    return subscribeMedia(reload);
-  }, [reload]);
+    Promise.all([reload(), reloadLocations()]).finally(() => setLoading(false));
+    const u1 = subscribeMedia(reload);
+    const u2 = subscribeLocations(reloadLocations);
+    return () => { u1(); u2(); };
+  }, [reload, reloadLocations]);
 
   // Every tag in use, most-used first, so filter chips and suggestions stay in sync with the data.
   const tagCounts = useMemo(() => {
@@ -85,7 +100,7 @@ export default function MediaLibraryTab({ currentUser }) {
       if (aiFilter === "real" && i.isAi) return false;
       if (!peopleFilter.every((p) => i.people.includes(p))) return false;
       if (!tagFilter.every((t) => i.tags.includes(t))) return false;
-      if (q && !`${i.title} ${i.fileName} ${i.notes} ${i.tags.join(" ")}`.toLowerCase().includes(q)) return false;
+      if (q && !`${i.title} ${i.mediaNumber || ""} ${mediaPath(i)} ${i.notes} ${i.tags.join(" ")}`.toLowerCase().includes(q)) return false;
       return true;
     });
   }, [items, search, typeFilter, kindFilter, formatFilter, aiFilter, peopleFilter, tagFilter]);
@@ -118,11 +133,16 @@ export default function MediaLibraryTab({ currentUser }) {
   return (
     <div>
       <ErrorBar>{error}</ErrorBar>
+      {notice && <div onClick={() => setNotice("")} style={{ background: "#E3F0E6", color: STYLES.green, padding: "8px 24px", fontSize: 13, cursor: "pointer" }}>{notice}</div>}
       <div style={{ padding: "16px 24px", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
           <button onClick={() => setEditing("new")} style={{ background: STYLES.wax, color: STYLES.parchment, border: "none", borderRadius: 4, padding: "9px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
             <Plus size={16} /> Add media
           </button>
+          <button onClick={() => setBulkOpen(true)} style={{ ...selectStyle(), cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: 600, padding: "9px 14px" }}>
+            <Layers size={15} /> Bulk add
+          </button>
+          <button onClick={() => setLocationsOpen(true)} aria-label="Storage locations" title="Storage locations" style={{ ...selectStyle(), cursor: "pointer", display: "flex", alignItems: "center", padding: "9px 10px" }}><Settings size={15} /></button>
           <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 360 }}>
             <Search size={14} style={{ position: "absolute", left: 9, top: 10, color: STYLES.slate }} />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, file name, notes, tags" style={{ ...selectStyle(), width: "100%", boxSizing: "border-box", paddingLeft: 28, fontSize: 14, padding: "8px 8px 8px 28px" }} />
@@ -169,7 +189,7 @@ export default function MediaLibraryTab({ currentUser }) {
           <EmptyMsg>Nothing matches those filters.</EmptyMsg>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
-            {filtered.map((i) => <MediaCard key={i.id} item={i} onOpen={setEditing} />)}
+            {filtered.map((i) => <MediaCard key={i.id} item={i} locations={locations} onOpen={setEditing} />)}
           </div>
         )}
       </div>
@@ -180,11 +200,18 @@ export default function MediaLibraryTab({ currentUser }) {
           item={editing === "new" ? null : editing}
           currentUser={currentUser}
           tagSuggestions={allTags}
+          locations={locations}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}
         />
       )}
+
+      {bulkOpen && (
+        <BulkAddModal existing={items} tagSuggestions={allTags} currentUser={currentUser} onClose={() => setBulkOpen(false)}
+          onDone={(n) => { setBulkOpen(false); setNotice(`Added ${n} ${n === 1 ? "item" : "items"} to the library.`); reload(); }} />
+      )}
+      {locationsOpen && <StorageLocationsForm locations={locations} onClose={() => setLocationsOpen(false)} onSaved={() => { setLocationsOpen(false); reloadLocations(); }} />}
     </div>
   );
 }

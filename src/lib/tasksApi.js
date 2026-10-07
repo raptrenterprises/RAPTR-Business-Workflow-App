@@ -10,6 +10,9 @@ function fromRow(r) {
     createdAt: r.created_at,
     importance: r.importance,
     urgency: r.urgency,
+    urgencySetAt: r.urgency_set_at || null,
+    // The date a RAPTRMeet task's urgency follows: its planned meet day, else the meet's start date.
+    meetDate: r.raptrmeet_day || r.raptrmeets?.start_date || null,
     dueDate: r.due_date,
     recurrence: r.recurrence,
     attachments: r.attachments || [],
@@ -25,7 +28,7 @@ function fromRow(r) {
 export async function fetchTasks() {
   const { data, error } = await supabase
     .from("tasks")
-    .select("*")
+    .select("*, raptrmeets(start_date)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data.map(fromRow);
@@ -60,6 +63,7 @@ export async function updateTask(id, patch) {
   if ("completed" in patch) dbPatch.completed = patch.completed;
   if ("importance" in patch) dbPatch.importance = patch.importance;
   if ("urgency" in patch) dbPatch.urgency = patch.urgency;
+  if ("urgencySetAt" in patch) dbPatch.urgency_set_at = patch.urgencySetAt;
   if ("dueDate" in patch) dbPatch.due_date = patch.dueDate;
   if ("recurrence" in patch) dbPatch.recurrence = patch.recurrence;
   if ("attachments" in patch) dbPatch.attachments = patch.attachments;

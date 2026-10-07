@@ -97,12 +97,11 @@ export default function CalendarSection({ currentUser, users, onOpenPost }) {
     [events, openItems]
   );
 
-  // Medium/Low items with no due date don't get a specific day — they show
-  // in a dedicated panel instead (only while viewing that granularity).
-  // Due-date items with a computed Medium/Low urgency already appear on
-  // their actual due date via dayItemsFor, so they're excluded here.
-  const weekBucket = useMemo(() => openItems.filter((it) => !it.dueDate && effectiveUrgency(it) === "Medium"), [openItems]);
-  const monthBucket = useMemo(() => openItems.filter((it) => !it.dueDate && effectiveUrgency(it) === "Low"), [openItems]);
+  // High (within a week) and Medium (within a month) items with no due date don't get a specific
+  // day — they show in a dedicated panel instead (only while viewing that granularity).
+  // Due-date items already appear on their actual due date via dayItemsFor, so they're excluded here.
+  const weekBucket = useMemo(() => openItems.filter((it) => !it.dueDate && effectiveUrgency(it) === "High"), [openItems]);
+  const monthBucket = useMemo(() => openItems.filter((it) => !it.dueDate && effectiveUrgency(it) === "Medium"), [openItems]);
 
   async function addEvent() {
     const title = draft.title.trim();
@@ -248,6 +247,7 @@ export default function CalendarSection({ currentUser, users, onOpenPost }) {
             onCancelEdit={() => { setEditingId(null); setEditDraft(null); }}
             onRemoveEvent={removeEvent}
             onSelectEvent={setSelectedEvent}
+            onOpenPost={onOpenPost}
             currentUser={currentUser}
             onPersistAttachments={persistEventAttachments}
           />
@@ -256,7 +256,7 @@ export default function CalendarSection({ currentUser, users, onOpenPost }) {
         {view === "month" && <MonthView refDate={refDate} dayItemsFor={dayItemsFor} monthBucket={monthBucket} onPick={setRefDate} setView={setView} onSelectEvent={setSelectedEvent} />}
       </main>
 
-      <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onEdit={(ev) => { startEditEvent(ev); setView("day"); setRefDate(ev.date); }} currentUser={currentUser} onPersistAttachments={persistEventAttachments} />
+      <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onEdit={(ev) => { startEditEvent(ev); setView("day"); setRefDate(ev.date); }} currentUser={currentUser} onPersistAttachments={persistEventAttachments} onOpenPost={onOpenPost} />
     </>
   );
 }
@@ -420,7 +420,7 @@ function EventDetailModal({ event, onClose, onEdit, currentUser, onPersistAttach
     </div>
   );
 }
-function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStartEdit, onSaveEdit, onCancelEdit, onRemoveEvent, onSelectEvent, currentUser, onPersistAttachments }) {
+function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStartEdit, onSaveEdit, onCancelEdit, onRemoveEvent, onSelectEvent, onOpenPost, currentUser, onPersistAttachments }) {
   const { events, tasks } = dayItemsFor(date);
   return (
     <div style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 18 }}>
@@ -449,6 +449,9 @@ function DayView({ date, dayItemsFor, editingId, editDraft, setEditDraft, onStar
                 {!e.allDay && e.time && <span style={{ fontSize: 12, color: STYLES.slate, flexShrink: 0 }}>{e.time}</span>}
                 {e.attachments && e.attachments.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, color: STYLES.slate, flexShrink: 0 }}><Paperclip size={11} /> {e.attachments.length}</span>}
                 <span style={{ fontSize: 10, color: EVENT_CATEGORY_COLOR[e.category] || STYLES.slate, fontWeight: 700, flexShrink: 0 }}>{e.category}</span>
+                {e.postId && onOpenPost && (
+                  <button onClick={() => onOpenPost(e.postId)} title="Open post" aria-label="Open post" style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: STYLES.wax, background: STYLES.wax + "14", border: `1px solid ${STYLES.wax}44`, padding: "2px 7px", borderRadius: 10, cursor: "pointer", flexShrink: 0 }}><Megaphone size={11} /> Open post</button>
+                )}
                 <button onClick={() => onStartEdit(e)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Pencil size={13} /></button>
                 <button onClick={() => onRemoveEvent(e.id)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, flexShrink: 0 }}><Trash2 size={13} /></button>
               </div>
@@ -485,7 +488,7 @@ function WeekView({ refDate, dayItemsFor, weekBucket, onPick, setView, onSelectE
           );
         })}
       </div>
-      <BucketPanel title="This Week — Medium priority" items={weekBucket} />
+      <BucketPanel title="This Week — High urgency" items={weekBucket} />
     </>
   );
 }
@@ -523,7 +526,7 @@ function MonthView({ refDate, dayItemsFor, monthBucket, onPick, setView, onSelec
           );
         })}
       </div>
-      <BucketPanel title="This Month — Low priority" items={monthBucket} />
+      <BucketPanel title="This Month — Medium urgency" items={monthBucket} />
     </>
   );
 }

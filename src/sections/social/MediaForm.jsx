@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { X, ImagePlus, Trash2, ExternalLink } from "lucide-react";
+import { X, ImagePlus, Trash2, ExternalLink, Copy } from "lucide-react";
 import { STYLES, uid, selectStyle } from "../../constants";
 import { uploadAttachment, deleteAttachment } from "../../lib/storageApi";
 import { makeThumbnail, isVideoFile } from "../../lib/thumbnails";
+import { resolveMediaUrl, expectedPath, cleanSubfolder } from "../../lib/mediaLinks";
 import { MEDIA_TYPES, ASSET_KINDS, POST_FORMATS, MEDIA_PEOPLE, normalizeTag } from "./socialConstants";
 
 const inputStyle = { ...selectStyle(), width: "100%", boxSizing: "border-box", fontSize: 14, padding: "8px 10px" };
@@ -27,11 +28,11 @@ function ToggleChip({ active, onClick, children, color }) {
 }
 
 const blankDraft = () => ({
-  id: uid(), title: "", mediaType: "photo", assetKind: "raw", isAi: false, postFormat: "", sourceUrl: "", fileName: "",
+  id: uid(), title: "", mediaType: "photo", assetKind: "raw", subfolder: "", isAi: false, postFormat: "", sourceUrl: "", fileName: "",
   onedriveItemId: "", thumbnailUrl: "", thumbnailPath: "", people: [], tags: [], shotDate: "", notes: "",
 });
 
-export default function MediaForm({ item, currentUser, tagSuggestions, onSave, onDelete, onClose }) {
+export default function MediaForm({ item, currentUser, tagSuggestions, locations, onSave, onDelete, onClose }) {
   const isNew = !item;
   const [draft, setDraft] = useState(item ? { ...item } : blankDraft());
   const [tagInput, setTagInput] = useState("");
@@ -79,7 +80,7 @@ export default function MediaForm({ item, currentUser, tagSuggestions, onSave, o
     setBusy(true);
     setError("");
     try {
-      const out = { ...draft, title: draft.title.trim(), sourceUrl: draft.sourceUrl.trim() };
+      const out = { ...draft, title: draft.title.trim(), sourceUrl: draft.sourceUrl.trim(), subfolder: cleanSubfolder(draft.subfolder), fileName: draft.fileName.trim() };
       const oldPath = item?.thumbnailPath || "";
       if (pendingThumb) {
         const file = new File([pendingThumb.blob], pendingThumb.name, { type: "image/jpeg" });
@@ -93,7 +94,7 @@ export default function MediaForm({ item, currentUser, tagSuggestions, onSave, o
       if (oldPath && oldPath !== out.thumbnailPath) { try { await deleteAttachment(oldPath); } catch (_) { /* already gone */ } }
       await onSave(out, isNew);
     } catch (err) {
-      setError("Couldn't save: " + err.message);
+      setError(/media_items_path_unique|duplicate key/i.test(err.message) ? "Another item already uses that file name in this folder. Change the file name or subfolder." : "Couldn't save: " + err.message);
       setBusy(false);
     }
   }
@@ -192,11 +193,25 @@ export default function MediaForm({ item, currentUser, tagSuggestions, onSave, o
           )}
         </Field>
 
-        <Field label="OneDrive link">
+        <Field label="Where the file lives">
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+            <input value={draft.subfolder} onChange={(e) => set({ subfolder: e.target.value })} placeholder="Subfolder (optional), e.g. 2026-10" style={{ ...inputStyle, flex: "1 1 160px", width: "auto" }} />
+            <input value={draft.fileName} onChange={(e) => set({ fileName: e.target.value })} placeholder="File name, e.g. PXL_20261003_123456.jpg" style={{ ...inputStyle, flex: "2 1 220px", width: "auto" }} />
+          </div>
+          {draft.fileName && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: STYLES.slate }}>
+              <span style={{ wordBreak: "break-all" }}>{expectedPath({ ...draft, subfolder: cleanSubfolder(draft.subfolder) })}</span>
+              <button type="button" onClick={() => navigator.clipboard?.writeText(draft.fileName)} aria-label="Copy the file name" title="Copy the file name" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, display: "flex" }}><Copy size={14} /></button>
+            </div>
+          )}
+          {item?.mediaNumber && <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 4 }}>Item #{item.mediaNumber}</div>}
+        </Field>
+
+        <Field label="Direct link to this file (optional)">
           <div style={{ display: "flex", gap: 6 }}>
-            <input value={draft.sourceUrl} onChange={(e) => set({ sourceUrl: e.target.value })} style={inputStyle} placeholder="Paste the file's OneDrive share link" inputMode="url" />
-            {draft.sourceUrl && /^https?:\/\//i.test(draft.sourceUrl) && (
-              <a href={draft.sourceUrl} target="_blank" rel="noopener noreferrer" aria-label="Open link" style={{ ...selectStyle(), display: "flex", alignItems: "center", color: STYLES.ink }}><ExternalLink size={16} /></a>
+            <input value={draft.sourceUrl} onChange={(e) => set({ sourceUrl: e.target.value })} style={inputStyle} placeholder="Leave blank to use the folder link from Storage locations" inputMode="url" />
+            {resolveMediaUrl(draft, locations) && (
+              <a href={resolveMediaUrl(draft, locations)} target="_blank" rel="noopener noreferrer" aria-label="Open link" style={{ ...selectStyle(), display: "flex", alignItems: "center", color: STYLES.ink }}><ExternalLink size={16} /></a>
             )}
           </div>
         </Field>

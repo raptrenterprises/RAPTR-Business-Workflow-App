@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { X, Plus, Trash2, ChevronRight, ChevronUp, ChevronDown, Search, ExternalLink } from "lucide-react";
 import { STYLES, uid, selectStyle } from "../../constants";
 import MediaPicker from "./MediaPicker";
+import { resolveMediaUrl } from "../../lib/mediaLinks";
 import {
-  POST_TYPES, MEDIA_PEOPLE, SHOT_MEDIA_TYPES, PIN_BOARDS, PIN_TOPICS, PIN_TOPICS_MAX, METRICS_BY_TYPE, createsCalendarEvent, STATUS_LABEL, STATUS_COLOR, SEEDER_FIELDS, UNIT_DEFAULT_COUNT, UNIT_NOUN,
+  POST_TYPES, MEDIA_PEOPLE, SHOT_MEDIA_TYPES, PIN_BOARDS, PIN_TOPICS, PIN_TOPICS_MAX, SQS_CATEGORIES, SQS_TAGS, SEO_TITLE_TARGET, SEO_DESCRIPTION_TARGET, METRICS_BY_TYPE, createsCalendarEvent, STATUS_LABEL, STATUS_COLOR, SEEDER_FIELDS, UNIT_DEFAULT_COUNT, UNIT_NOUN,
   typeConfig, statusFlow, nextStatuses, normalizeStatus, isOnCalendarStatus, normalizeTag,
 } from "./socialConstants";
 
@@ -156,7 +157,7 @@ function UnitCard({ index, count, noun, kind, unit, open, summary, media, onTogg
         <>
           <Field label="Text overlay"><textarea value={unit.textOverlay} onChange={(e) => onPatch(unit.id, { textOverlay: e.target.value })} rows={2} style={textareaStyle} /></Field>
           {children}
-          <FinalMediaField label="Final edited image" mediaId={unit.finalMediaId} legacyUrl={unit.finalUrl} media={media} pickType="photo" onPick={(id) => onPatch(unit.id, { finalMediaId: id })} onClearLegacy={() => onPatch(unit.id, { finalUrl: "" })} />
+          <FinalMediaField locations={locations} label="Final edited image" mediaId={unit.finalMediaId} legacyUrl={unit.finalUrl} media={media} pickType="photo" onPick={(id) => onPatch(unit.id, { finalMediaId: id })} onClearLegacy={() => onPatch(unit.id, { finalUrl: "" })} />
         </>
       ) : (
         <>
@@ -171,7 +172,7 @@ function UnitCard({ index, count, noun, kind, unit, open, summary, media, onTogg
 
 // A drop-down that opens a pop-up of checkboxes, so several items can be ticked without cluttering the page.
 // Optionally lets you type a one-off entry, and caps how many can be chosen.
-function MultiSelectDropdown({ options, selected, onChange, max, allowCustom, placeholder }) {
+function MultiSelectDropdown({ options, selected, onChange, max, allowCustom, placeholder, markOld }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
   const ref = useRef(null);
@@ -214,7 +215,7 @@ function MultiSelectDropdown({ options, selected, onChange, max, allowCustom, pl
             const blocked = !checked && full;
             return (
               <label key={o} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", fontSize: 14, cursor: blocked ? "default" : "pointer", opacity: blocked ? 0.45 : 1 }}>
-                <input type="checkbox" checked={checked} disabled={blocked} onChange={() => toggle(o)} style={{ width: 17, height: 17, accentColor: STYLES.purple }} /> {o}
+                <input type="checkbox" checked={checked} disabled={blocked} onChange={() => toggle(o)} style={{ width: 17, height: 17, accentColor: STYLES.purple }} /> {o}{markOld && !options.includes(o) && <span style={{ fontSize: 11, color: STYLES.slate }}> (not in the current list)</span>}
               </label>
             );
           })}
@@ -238,7 +239,7 @@ function MultiSelectDropdown({ options, selected, onChange, max, allowCustom, pl
 }
 
 // The final edited image/video: picked from the media library (not pasted as a link).
-function FinalMediaField({ label, mediaId, legacyUrl, media, pickType, onPick, onClearLegacy }) {
+function FinalMediaField({ label, mediaId, legacyUrl, media, locations, pickType, onPick, onClearLegacy }) {
   const [open, setOpen] = useState(false);
   const item = media.find((m) => m.id === mediaId);
   return (
@@ -252,7 +253,7 @@ function FinalMediaField({ label, mediaId, legacyUrl, media, pickType, onPick, o
             <div style={{ fontSize: 14, fontWeight: 600, wordBreak: "break-word" }}>{item.title}</div>
             <div style={{ fontSize: 12, color: STYLES.slate }}>{item.assetKind === "finished" ? item.postFormat || "Finished" : "Raw"}{item.isAi ? " · AI" : ""}</div>
           </div>
-          {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" aria-label="Open file" style={{ ...iconBtn, color: STYLES.ink }}><ExternalLink size={16} /></a>}
+          {resolveMediaUrl(item, locations) && <a href={resolveMediaUrl(item, locations)} target="_blank" rel="noopener noreferrer" aria-label="Open file" style={{ ...iconBtn, color: STYLES.ink }}><ExternalLink size={16} /></a>}
           <button type="button" onClick={() => setOpen(true)} style={{ ...selectStyle(), cursor: "pointer" }}>Change</button>
           <button type="button" onClick={() => onPick("")} aria-label="Remove" style={iconBtn}><X size={16} /></button>
         </div>
@@ -367,7 +368,7 @@ const blankPost = (campaignId) => ({
   id: uid(), title: "", postType: "Reel", status: "idea", publishDate: "", publishTime: "", description: "", caption: "", seederComments: "",
   aiImagesAllowed: false, finalMediaId: "", blogDocUrl: "",
   seederRaptr: "", seederEvan: "", seederEvanReply: "", seederCathy: "", seederCathyReply: "", textOverlay: "", finalUrl: "",
-  blogText: "", sqsCategories: [], sqsTags: [], crossLinks: "", pinCategories: [], pinBoardPrimary: "", pinBoardsSecondary: [], pinDescription: "", pinTitle: "", pinLink: "", pinTopics: [], pinAltText: "",
+  blogText: "", sqsCategories: [], sqsTags: [], seoTitle: "", seoDescription: "", crossLinks: "", pinCategories: [], pinBoardPrimary: "", pinBoardsSecondary: [], pinDescription: "", pinTitle: "", pinLink: "", pinTopics: [], pinAltText: "",
   musicAudio: "", pollEnabled: false, pollQuestion: "", pollOptions: [], metrics: {}, metricsUpdatedOn: "", attachments: [],
   notes: "", tags: [], campaignId: campaignId || "",
 });
@@ -392,7 +393,7 @@ const unitHasContent = (unit, shotList) =>
   [unit.textOverlay, unit.script, unit.editingNotes, unit.finalUrl, unit.finalMediaId].some((v) => v && v.trim()) || shotList.some((s) => s.unitId === unit.id && s.description.trim());
 const badUrl = (v) => v.trim() && !/^https?:\/\//i.test(v.trim());
 
-export default function PostForm({ post, defaults, notice, shots, units: savedUnits, keywords: savedKeywords, shotMedia, media, campaigns, currentUser, onSave, onDelete, onClose }) {
+export default function PostForm({ post, defaults, notice, shots, units: savedUnits, keywords: savedKeywords, locations, shotMedia, media, campaigns, currentUser, onSave, onDelete, onClose }) {
   const isNew = !post;
   const [originalLinks] = useState(() => {
     const m = {};
@@ -603,8 +604,10 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
                 {draft.blogText && (
                   <Field label="Earlier typed text (plain text only; headings and links aren't kept)"><textarea value={draft.blogText} onChange={(e) => set({ blogText: e.target.value })} rows={6} style={textareaStyle} /></Field>
                 )}
-                <Field label="Squarespace categories" hint="Comma separated. Capitals are kept as typed."><CommaTagInput keepCase tags={draft.sqsCategories} onChange={(sqsCategories) => set({ sqsCategories })} placeholder="e.g. Party Planning, Mystery Tips" /></Field>
-                <Field label="Squarespace tags" hint="Comma separated. These are separate from the internal tags below."><CommaTagInput keepCase tags={draft.sqsTags} onChange={(sqsTags) => set({ sqsTags })} placeholder="e.g. murder mystery, hosting" /></Field>
+                <Field label="SEO title" hint={`${draft.seoTitle.length} characters. Search results usually show about ${SEO_TITLE_TARGET}.`}><input value={draft.seoTitle} onChange={(e) => set({ seoTitle: e.target.value })} style={inputStyle} /></Field>
+                <Field label="SEO description" hint={`${draft.seoDescription.length} characters. Search results usually show about ${SEO_DESCRIPTION_TARGET}.`}><textarea value={draft.seoDescription} onChange={(e) => set({ seoDescription: e.target.value })} rows={3} style={textareaStyle} /></Field>
+                <Field label="Squarespace categories"><MultiSelectDropdown markOld options={SQS_CATEGORIES} selected={draft.sqsCategories} placeholder="Choose categories…" onChange={(sqsCategories) => set({ sqsCategories })} /></Field>
+                <Field label="Squarespace tags" hint="Separate from the internal tags below."><MultiSelectDropdown markOld options={SQS_TAGS} selected={draft.sqsTags} placeholder="Choose tags…" onChange={(sqsTags) => set({ sqsTags })} /></Field>
               </>
             )}
             {showOverlay && <Field label="Text overlay"><textarea value={draft.textOverlay} onChange={(e) => set({ textOverlay: e.target.value })} rows={2} style={textareaStyle} /></Field>}
@@ -639,7 +642,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
               </>
             )}
             <ShotGroup label={cfg.shotLabel} shots={shotList} multi={cfg.shots === "multi"} mediaById={mediaById} onPatch={patchShot} onRemove={dropShotFromList} onAdd={() => addShot(null)} onFind={setPickerShotId} />
-            {cfg.finalLabel && <FinalMediaField label={cfg.finalLabel.replace(" (link)", "")} mediaId={draft.finalMediaId} legacyUrl={draft.finalUrl} media={media} pickType={draft.postType === "Pinterest pin" ? "" : "photo"} onPick={(id) => set({ finalMediaId: id })} onClearLegacy={() => set({ finalUrl: "" })} />}
+            {cfg.finalLabel && <FinalMediaField locations={locations} label={cfg.finalLabel.replace(" (link)", "")} mediaId={draft.finalMediaId} legacyUrl={draft.finalUrl} media={media} pickType={draft.postType === "Pinterest pin" ? "" : "photo"} onPick={(id) => set({ finalMediaId: id })} onClearLegacy={() => set({ finalUrl: "" })} />}
             {cfg.blog && <Field label="Cross-reference links to add after publishing" hint="Posts or pages to link to once this is live"><textarea value={draft.crossLinks} onChange={(e) => set({ crossLinks: e.target.value })} rows={3} style={textareaStyle} /></Field>}
             {cfg.attachments && (
               <Field label="Attachments (links)">
@@ -657,7 +660,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
         )}
 
         {/* ---- Reel: one final video per reel ---- */}
-        {cfg.units && cfg.finalLabel && <FinalMediaField label={cfg.finalLabel.replace(" (link)", "")} mediaId={draft.finalMediaId} legacyUrl={draft.finalUrl} media={media} pickType="video" onPick={(id) => set({ finalMediaId: id })} onClearLegacy={() => set({ finalUrl: "" })} />}
+        {cfg.units && cfg.finalLabel && <FinalMediaField locations={locations} label={cfg.finalLabel.replace(" (link)", "")} mediaId={draft.finalMediaId} legacyUrl={draft.finalUrl} media={media} pickType="video" onPick={(id) => set({ finalMediaId: id })} onClearLegacy={() => set({ finalUrl: "" })} />}
 
         {(showCaption || showSeeders) && (
           <Section title="Caption & seeder comments">

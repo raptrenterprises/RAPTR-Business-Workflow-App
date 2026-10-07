@@ -121,7 +121,9 @@ export default function ThreadsSection({ currentUser, users }) {
   }
 
   async function updateLevel(threadId, field, value) {
-    try { await updateThread(threadId, { [field]: value }); reload(); } catch (e) { setError("Couldn't update: " + e.message); }
+    // Changing a thread's urgency starts that urgency's timeline over from today.
+    const patch = field === "urgency" ? { urgency: value, urgencySetAt: new Date().toISOString() } : { [field]: value };
+    try { await updateThread(threadId, patch); reload(); } catch (e) { setError("Couldn't update: " + e.message); }
   }
 
   async function updateDueDate(threadId, value) {
@@ -132,7 +134,7 @@ export default function ThreadsSection({ currentUser, users }) {
     const th = threads.find((t) => t.id === threadId);
     if (!th) return;
     try {
-      if (mode === "urgency") await updateThread(threadId, { dueDate: null, urgency: th.urgency || "Medium" });
+      if (mode === "urgency") await updateThread(threadId, { dueDate: null, urgency: th.urgency || "Medium", urgencySetAt: new Date().toISOString() });
       else await updateThread(threadId, { urgency: null });
       reload();
     } catch (e) { setError("Couldn't update: " + e.message); }
@@ -342,7 +344,8 @@ function ThreadCard({
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
             <UrgencyOrDueDateField
               mode={th.dueDate ? "dueDate" : "urgency"} setMode={(m) => onSetUrgencyMode(th.id, m)}
-              urgency={th.urgency || "Medium"} setUrgency={(v) => onUpdateLevel(th.id, "urgency", v)}
+              urgency={th.dueDate ? (th.urgency || "Medium") : effectiveUrgency(th)} setUrgency={(v) => onUpdateLevel(th.id, "urgency", v)}
+              onRestart={() => onUpdateLevel(th.id, "urgency", th.dueDate ? (th.urgency || "Medium") : effectiveUrgency(th))}
               dueDate={th.dueDate || ""} setDueDate={(v) => onUpdateDueDate(th.id, v)}
             />
             <ImportanceSelect value={th.importance} onChange={(v) => onUpdateLevel(th.id, "importance", v)} />

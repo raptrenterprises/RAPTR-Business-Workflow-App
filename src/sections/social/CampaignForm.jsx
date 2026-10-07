@@ -67,7 +67,7 @@ export default function CampaignForm({ campaign, posts, allPosts, currentUser, o
                     <div style={{ fontSize: 13.5, fontWeight: 600, wordBreak: "break-word" }}>{p.title}</div>
                     <div style={{ fontSize: 12, color: STYLES.slate }}>{p.postType}{p.publishDate ? ` · ${formatPostDate(p.publishDate)}${p.publishTime ? ` ${formatClockTime(p.publishTime)}` : ""}` : ""}</div>
                   </div>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: c, border: `1px solid ${c}66`, background: `${c}14`, padding: "2px 9px", borderRadius: 10 }}>{STATUS_LABEL[p.status]}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: c, border: `1px solid ${c}66`, background: `${c}14`, padding: "2px 9px", borderRadius: 10, whiteSpace: "normal", textAlign: "center", lineHeight: 1.25, maxWidth: 110, flexShrink: 0 }}>{STATUS_LABEL[p.status]}</span>
                   <button type="button" onClick={() => onUnlinkPost(p)} aria-label="Remove from campaign" title="Remove from campaign" style={{ background: "transparent", border: "none", cursor: "pointer", color: STYLES.slate, display: "flex" }}><Unlink size={15} /></button>
                 </div>
               );

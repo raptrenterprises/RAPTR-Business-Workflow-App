@@ -3,8 +3,8 @@ export const MEDIA_TYPES = [
   { value: "video", label: "Video" },
 ];
 export const ASSET_KINDS = [
-  { value: "raw", label: "Raw (unedited)" },
-  { value: "finished", label: "Finished post" },
+  { value: "raw", label: "Raw (raw folder)" },
+  { value: "finished", label: "Finished (edited folder)" },
 ];
 export const POST_FORMATS = ["Reel", "Carousel", "Image post", "Story", "Pinterest pin", "Blog thumbnail", "Other"];
 export const MEDIA_PEOPLE = ["Cathy", "Evan", "Product", "Food/Cocktail", "Text only", "Other"];
@@ -105,6 +105,12 @@ export const PIN_TOPICS = [
   "role playing games", "cocktail recipes",
 ];
 export const PIN_TOPICS_MAX = 10;
+
+// ---- Blog (Squarespace) ----
+export const SQS_CATEGORIES = ["Dinner Party Hosting Tips", "Murder Mystery Dinner Parties", "RAPTR Mysteries Products", "Wedding Activities"];
+export const SQS_TAGS = ["Choosing a Mystery", "How it Works"];
+export const SEO_TITLE_TARGET = 60; // search results usually show about this many characters
+export const SEO_DESCRIPTION_TARGET = 155;
 
 // ---- Performance metrics (entered by hand once a post is Live) ----
 // Instagram's current Insights metrics: "views" replaced "impressions" in 2025. Story taps/exits and

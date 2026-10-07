@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { fetchPosts, fetchShotItems, fetchCampaigns, fetchShotMedia, fetchUnits, fetchKeywords, subscribePosts, subscribeShotItems, subscribeCampaigns, subscribeShotMedia, subscribeUnits, subscribeKeywords } from "../../lib/postsApi";
-import { fetchMedia, subscribeMedia } from "../../lib/mediaApi";
+import { fetchMedia, subscribeMedia, fetchLocations, subscribeLocations } from "../../lib/mediaApi";
 
 // Loads posts, shot items, campaigns, the media library, and shot<->media links once
 // for the whole Social section and keeps them live, so the Planner, Campaigns tab,
@@ -13,6 +13,7 @@ export default function useSocialData() {
   const [shotMedia, setShotMedia] = useState([]);
   const [units, setUnits] = useState([]);
   const [keywords, setKeywords] = useState([]);
+  const [locations, setLocations] = useState({ raw: { baseUrl: "", linkStyle: "folder" }, edited: { baseUrl: "", linkStyle: "folder" } });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -36,12 +37,16 @@ export default function useSocialData() {
     try { setUnits(await fetchUnits()); } catch (e) { setError("Couldn't load slides and beats: " + e.message); }
   }, []);
 
+  const reloadLocations = useCallback(async () => {
+    try { setLocations(await fetchLocations()); } catch (e) { setError("Couldn't load storage locations: " + e.message); }
+  }, []);
+
   const reloadKeywords = useCallback(async () => {
     try { setKeywords(await fetchKeywords()); } catch (e) { setError("Couldn't load keywords: " + e.message); }
   }, []);
 
   useEffect(() => {
-    Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits(), reloadKeywords()]).finally(() => setLoading(false));
+    Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits(), reloadKeywords(), reloadLocations()]).finally(() => setLoading(false));
     const subs = [
       subscribePosts(reloadPosts),
       subscribeShotItems(() => { reloadShots(); reloadPosts(); }), // a finished shot list can move a post to "Filmed"
@@ -50,10 +55,11 @@ export default function useSocialData() {
       subscribeShotMedia(() => { reloadShotMedia(); reloadShots(); reloadPosts(); }),
       subscribeUnits(reloadUnits),
       subscribeKeywords(reloadKeywords),
+      subscribeLocations(reloadLocations),
     ];
     return () => subs.forEach((u) => u());
-  }, [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits, reloadKeywords]);
+  }, [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits, reloadKeywords, reloadLocations]);
 
   const reloadAll = useCallback(() => Promise.all([reloadPosts(), reloadShots(), reloadCampaigns(), reloadMedia(), reloadShotMedia(), reloadUnits(), reloadKeywords()]), [reloadPosts, reloadShots, reloadCampaigns, reloadMedia, reloadShotMedia, reloadUnits, reloadKeywords]);
-  return { posts, shots, units, keywords, campaigns, media, shotMedia, loading, error, setError, reloadAll };
+  return { posts, shots, units, keywords, locations, campaigns, media, shotMedia, loading, error, setError, reloadAll };
 }

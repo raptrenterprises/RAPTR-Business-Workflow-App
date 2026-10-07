@@ -3,27 +3,30 @@ import { ChevronLeft, ChevronRight, Hand } from "lucide-react";
 import { STYLES, selectStyle, todayStr, formatClockTime } from "../../constants";
 import { POST_TYPES, STATUS_LABEL, STATUS_TEXT_COLOR, typeColor } from "./socialConstants";
 
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]; // same week start as the main calendar
 const pad = (n) => String(n).padStart(2, "0");
-const ymd = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const MAX_VISIBLE = 3;
 
 function PostChip({ post, picked, moveMode, onOpen, onPick, onDragStart }) {
   const color = typeColor(post.postType);
+  const time = post.publishTime ? `${formatClockTime(post.publishTime).replace(":00", "").replace(" ", "").toLowerCase()} ` : "";
   return (
     <div
       draggable
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", post.id); e.dataTransfer.effectAllowed = "move"; onDragStart(post.id); }}
       onClick={(e) => { e.stopPropagation(); if (moveMode) onPick(post.id); else onOpen(post); }}
       title={`${post.title} · ${post.postType} · ${STATUS_LABEL[post.status]}`}
-      style={{ background: `${color}22`, borderLeft: `4px solid ${color}`, color: STATUS_TEXT_COLOR[post.status] || STYLES.ink, fontWeight: 600, fontSize: 11.5, lineHeight: 1.25, padding: "2px 5px", borderRadius: 3, cursor: moveMode ? "pointer" : "grab", outline: picked ? `2px solid ${STYLES.ink}` : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+      style={{ fontSize: 10, fontWeight: 600, background: `${color}22`, borderLeft: `2px solid ${color}`, color: STATUS_TEXT_COLOR[post.status] || STYLES.ink, borderRadius: 3, padding: "1px 4px", marginBottom: 2, cursor: moveMode ? "pointer" : "grab", wordBreak: "break-word", whiteSpace: "normal", outline: picked ? `2px solid ${STYLES.ink}` : "none" }}
     >
-      {post.publishTime ? `${formatClockTime(post.publishTime).replace(":00", "").replace(" ", "").toLowerCase()} ` : ""}{post.title}
+      {time}{post.title}
     </div>
   );
 }
 
-// Month view of every dated post. Drag a post onto another day to move it (its time stays the same).
-// Browsers don't support drag-and-drop by touch, so "Tap to move" lets you tap a post, then tap a day.
+// Month view of every dated post, laid out like the main calendar: seven equal columns that never
+// scroll sideways. Drag a post to another day to move it (its time stays). Touch screens can't use
+// drag-and-drop, so "Tap to move" lets you tap a post, then tap a day.
 export default function PostCalendarTab({ posts, onOpenPost, onMovePost }) {
   const today = todayStr();
   const [cursor, setCursor] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 }));
@@ -32,6 +35,7 @@ export default function PostCalendarTab({ posts, onOpenPost, onMovePost }) {
   const [pickedId, setPickedId] = useState(null);
   const [dragId, setDragId] = useState(null);
   const [overDay, setOverDay] = useState(null);
+  const [expandedDays, setExpandedDays] = useState({});
 
   const visible = useMemo(() => posts.filter((p) => typeFilter === "all" || p.postType === typeFilter), [posts, typeFilter]);
   const byDay = useMemo(() => {
@@ -41,17 +45,20 @@ export default function PostCalendarTab({ posts, onOpenPost, onMovePost }) {
     return m;
   }, [visible]);
   const undated = visible.filter((p) => !p.publishDate);
+  const postById = useMemo(() => Object.fromEntries(posts.map((p) => [p.id, p])), [posts]);
 
-  const first = new Date(cursor.y, cursor.m, 1);
-  const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
-  const cells = [];
-  for (let i = 0; i < first.getDay(); i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(ymd(cursor.y, cursor.m, d));
-  while (cells.length % 7 !== 0) cells.push(null);
+  // Whole weeks, Monday to Sunday, like the main calendar (days outside the month are greyed).
+  const monthStart = new Date(cursor.y, cursor.m, 1);
+  const monthEnd = new Date(cursor.y, cursor.m + 1, 0);
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(gridStart.getDate() - ((monthStart.getDay() + 6) % 7));
+  const gridEnd = new Date(monthEnd);
+  gridEnd.setDate(gridEnd.getDate() + ((7 - monthEnd.getDay()) % 7));
+  const days = [];
+  for (const d = new Date(gridStart); d <= gridEnd; d.setDate(d.getDate() + 1)) days.push(ymd(d));
 
   const shift = (delta) => setCursor((c) => { const d = new Date(c.y, c.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
-  const monthLabel = first.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  const postById = useMemo(() => Object.fromEntries(posts.map((p) => [p.id, p])), [posts]);
+  const monthLabel = monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   function dropOn(day, id) {
     setOverDay(null);
@@ -82,44 +89,50 @@ export default function PostCalendarTab({ posts, onOpenPost, onMovePost }) {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11.5, color: STYLES.slate, marginBottom: 8, alignItems: "center" }}>
-        {POST_TYPES.map((t) => <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, background: typeColor(t), borderRadius: 2 }} />{t}</span>)}
-        <span style={{ marginLeft: "auto" }}>Text: <b style={{ color: "#2E7D32" }}>scheduled/live</b> · <b style={{ color: "#1F5FBF" }}>drafted/edited/ready to post</b> · <b style={{ color: "#C26A00" }}>idea/planned/filmed</b></span>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11, color: STYLES.slate, marginBottom: 8, alignItems: "center" }}>
+        {POST_TYPES.map((t) => <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 9, height: 9, background: typeColor(t), borderRadius: 2 }} />{t}</span>)}
+      </div>
+      <div style={{ fontSize: 11, color: STYLES.slate, marginBottom: 8 }}>
+        Text color: <b style={{ color: "#2E7D32" }}>scheduled / live</b> · <b style={{ color: "#1F5FBF" }}>drafted / edited / ready to post</b> · <b style={{ color: "#C26A00" }}>idea / planned / filmed</b>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <div style={{ minWidth: 640 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: `${STYLES.ink}22`, border: `1px solid ${STYLES.ink}22`, borderBottom: "none" }}>
-            {DOW.map((d) => <div key={d} style={{ background: STYLES.parchment, padding: "4px 6px", fontSize: 12, fontWeight: 700, color: STYLES.slate }}>{d}</div>)}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: `${STYLES.ink}22`, border: `1px solid ${STYLES.ink}22` }}>
-            {cells.map((day, i) => {
-              const items = day ? byDay[day] || [] : [];
-              const isToday = day === today;
-              const over = overDay === day && day;
-              return (
-                <div
-                  key={i}
-                  onDragOver={(e) => { if (day) { e.preventDefault(); setOverDay(day); } }}
-                  onDragLeave={() => setOverDay((d) => (d === day ? null : d))}
-                  onDrop={(e) => { e.preventDefault(); dropOn(day, e.dataTransfer.getData("text/plain") || dragId); }}
-                  onClick={() => { if (moveMode && pickedId && day) dropOn(day, pickedId); }}
-                  style={{ background: over ? `${STYLES.brass}33` : day ? "#fff" : `${STYLES.ink}08`, minHeight: 92, padding: 4, display: "flex", flexDirection: "column", gap: 3, cursor: moveMode && pickedId && day ? "copy" : "default" }}
-                >
-                  {day && <div style={{ fontSize: 12, fontWeight: isToday ? 800 : 500, color: isToday ? "#fff" : STYLES.slate, background: isToday ? STYLES.wax : "transparent", borderRadius: 10, padding: isToday ? "0 6px" : 0, alignSelf: "flex-start" }}>{Number(day.slice(8))}</div>}
-                  {items.map((p) => <PostChip key={p.id} post={p} picked={pickedId === p.id} moveMode={moveMode} onOpen={onOpenPost} onPick={setPickedId} onDragStart={setDragId} />)}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 1, background: STYLES.ink + "22", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, overflow: "hidden" }}>
+        {WEEKDAYS.map((w) => (
+          <div key={w} style={{ background: STYLES.brass + "33", textAlign: "center", fontSize: 11, fontWeight: 700, padding: "6px 0", color: STYLES.ink }}>{w}</div>
+        ))}
+        {days.map((day) => {
+          const items = byDay[day] || [];
+          const inMonth = Number(day.slice(5, 7)) - 1 === cursor.m;
+          const isToday = day === today;
+          const over = overDay === day;
+          const showAll = expandedDays[day];
+          const shown = showAll ? items : items.slice(0, MAX_VISIBLE);
+          return (
+            <div
+              key={day}
+              onDragOver={(e) => { e.preventDefault(); setOverDay(day); }}
+              onDragLeave={() => setOverDay((d) => (d === day ? null : d))}
+              onDrop={(e) => { e.preventDefault(); dropOn(day, e.dataTransfer.getData("text/plain") || dragId); }}
+              onClick={() => { if (moveMode && pickedId) dropOn(day, pickedId); }}
+              style={{ background: over ? `${STYLES.brass}44` : inMonth ? "#fff" : STYLES.gray, minHeight: 88, minWidth: 0, padding: 6, opacity: inMonth ? 1 : 0.6, overflow: "hidden", cursor: moveMode && pickedId ? "copy" : "default" }}
+            >
+              <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? STYLES.wax : STYLES.ink, marginBottom: 3 }}>{Number(day.slice(8, 10))}</div>
+              {shown.map((p) => <PostChip key={p.id} post={p} picked={pickedId === p.id} moveMode={moveMode} onOpen={onOpenPost} onPick={setPickedId} onDragStart={setDragId} />)}
+              {items.length > MAX_VISIBLE && (
+                <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedDays((m) => ({ ...m, [day]: !m[day] })); }} style={{ background: "transparent", border: "none", padding: 0, fontSize: 10, color: STYLES.slate, cursor: "pointer", textDecoration: "underline" }}>
+                  {showAll ? "Show less" : `+${items.length - MAX_VISIBLE} more`}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {undated.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: STYLES.slate, marginBottom: 6 }}>Unscheduled ({undated.length}). Drag one onto a day to give it a date.</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {undated.map((p) => <div key={p.id} style={{ maxWidth: 240 }}><PostChip post={p} picked={pickedId === p.id} moveMode={moveMode} onOpen={onOpenPost} onPick={setPickedId} onDragStart={setDragId} /></div>)}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 4 }}>
+            {undated.map((p) => <PostChip key={p.id} post={p} picked={pickedId === p.id} moveMode={moveMode} onOpen={onOpenPost} onPick={setPickedId} onDragStart={setDragId} />)}
           </div>
         </div>
       )}

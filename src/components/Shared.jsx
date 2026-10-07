@@ -33,7 +33,7 @@ export function ImportanceSelect({ value, onChange }) {
   );
 }
 
-export function UrgencyOrDueDateField({ mode, setMode, urgency, setUrgency, dueDate, setDueDate }) {
+export function UrgencyOrDueDateField({ mode, setMode, urgency, setUrgency, dueDate, setDueDate, onRestart, restarted, meetNote }) {
   const btnStyle = (active) => ({
     padding: "6px 10px", fontSize: 12, border: "none", cursor: "pointer",
     background: active ? STYLES.brass : "#fff", color: active ? STYLES.ink : STYLES.slate, fontWeight: active ? 700 : 400,
@@ -45,7 +45,18 @@ export function UrgencyOrDueDateField({ mode, setMode, urgency, setUrgency, dueD
         <button type="button" onClick={() => setMode("dueDate")} style={btnStyle(mode === "dueDate")}>Set due date</button>
       </div>
       {mode === "urgency" ? (
-        <UrgencySelect value={urgency} onChange={setUrgency} />
+        meetNote ? (
+          <span style={{ fontSize: 13, color: STYLES.slate }}>{meetNote}</span>
+        ) : (
+          <>
+            <UrgencySelect value={urgency} onChange={setUrgency} />
+            {onRestart && (
+              <button type="button" onClick={onRestart} title="Start this urgency's timeline over from today" style={{ background: "none", border: "none", padding: 0, fontSize: 12, cursor: "pointer", color: restarted ? STYLES.green : STYLES.slate, textDecoration: restarted ? "none" : "underline" }}>
+                {restarted ? "Timeline will restart" : "Restart timeline"}
+              </button>
+            )}
+          </>
+        )
       ) : (
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: STYLES.slate }}>
           Due <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={selectStyle()} />

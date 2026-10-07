@@ -192,7 +192,7 @@ function PostsToScheduleCard({ posts, onNavigate, onOpenPost }) {
                     {overdue ? "Overdue · " : ""}{formatPostDate(p.publishDate)}{p.publishTime ? ` · ${formatClockTime(p.publishTime)}` : ""} · {p.postType}
                   </span>
                 </span>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: c, border: `1px solid ${c}66`, background: `${c}14`, padding: "2px 9px", borderRadius: 10, whiteSpace: "nowrap" }}>{POST_STATUS_LABEL[p.status]}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: c, border: `1px solid ${c}66`, background: `${c}14`, padding: "2px 9px", borderRadius: 10, whiteSpace: "normal", textAlign: "center", lineHeight: 1.25, maxWidth: 110, flexShrink: 0 }}>{POST_STATUS_LABEL[p.status]}</span>
               </div>
             );
           })}

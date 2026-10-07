@@ -9,6 +9,8 @@ function fromRow(r) {
     postFormat: r.post_format || "",
     sourceUrl: r.source_url || "",
     fileName: r.file_name || "",
+    subfolder: r.subfolder || "",
+    mediaNumber: r.media_number ?? null,
     onedriveItemId: r.onedrive_item_id || "",
     thumbnailUrl: r.thumbnail_url || "",
     thumbnailPath: r.thumbnail_path || "",
@@ -30,6 +32,7 @@ function toRow(m) {
     post_format: m.assetKind === "finished" ? m.postFormat || null : null,
     source_url: m.sourceUrl || null,
     file_name: m.fileName || null,
+    subfolder: m.subfolder ? m.subfolder : null,
     onedrive_item_id: m.onedriveItemId || null,
     thumbnail_url: m.thumbnailUrl || null,
     thumbnail_path: m.thumbnailPath || null,
@@ -75,6 +78,35 @@ export function subscribeMedia(onChange) {
   const channel = supabase
     .channel(`media-changes-${Math.random().toString(36).slice(2)}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "media_items" }, onChange)
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+// Several items at once (the bulk add). Each row is a full media item with its own id.
+export async function insertMediaBatch(items) {
+  const rows = items.map((m) => ({ id: m.id, ...toRow(m), created_by: m.createdBy, created_at: m.createdAt }));
+  const { error } = await supabase.from("media_items").insert(rows);
+  if (error) throw error;
+}
+
+// Where each collection's files live: { raw: { baseUrl, linkStyle }, edited: { ... } }.
+export async function fetchLocations() {
+  const { data, error } = await supabase.from("media_locations").select("*");
+  if (error) throw error;
+  const out = { raw: { baseUrl: "", linkStyle: "folder" }, edited: { baseUrl: "", linkStyle: "folder" } };
+  data.forEach((r) => { out[r.collection] = { baseUrl: r.base_url || "", linkStyle: r.link_style || "folder" }; });
+  return out;
+}
+
+export async function saveLocation(collection, baseUrl, linkStyle) {
+  const { error } = await supabase.from("media_locations").upsert({ collection, base_url: baseUrl || null, link_style: linkStyle, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+export function subscribeLocations(onChange) {
+  const channel = supabase
+    .channel(`media-locations-${Math.random().toString(36).slice(2)}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "media_locations" }, onChange)
     .subscribe();
   return () => supabase.removeChannel(channel);
 }
