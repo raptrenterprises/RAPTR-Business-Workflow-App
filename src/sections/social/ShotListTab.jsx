@@ -32,6 +32,7 @@ function ShotLine({ shot, post, unitLabel, linked, showPost, onToggle, onFind })
         <div style={{ fontSize: 14, textDecoration: shot.completed ? "line-through" : "none", color: shot.completed ? STYLES.slate : STYLES.ink, wordBreak: "break-word" }}>{shot.description}</div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5, alignItems: "center" }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: STYLES.ink, border: `1px solid ${STYLES.ink}33`, borderRadius: 10, padding: "1px 7px" }}>{shot.mediaType === "photo" ? "Photo" : shot.mediaType === "video" ? "Video" : "Photo or video"}</span>
+          {shot.aspectRatio && <span style={{ fontSize: 11, fontWeight: 600, color: STYLES.ink, border: `1px solid ${STYLES.ink}33`, borderRadius: 10, padding: "1px 7px" }}>{shot.aspectRatio}</span>}
           {shot.people.map((p) => <span key={p} style={{ fontSize: 11, color: STYLES.blue, border: `1px solid ${STYLES.blue}55`, background: `${STYLES.blue}14`, borderRadius: 10, padding: "1px 7px" }}>{p}</span>)}
           {shot.tags.map((t) => <span key={t} style={{ fontSize: 11, color: STYLES.purple, border: `1px solid ${STYLES.purple}55`, background: `${STYLES.purple}14`, borderRadius: 10, padding: "1px 7px" }}>{t}</span>)}
           {unitLabel && <span style={{ fontSize: 11, fontWeight: 600, color: STYLES.slate, border: `1px solid ${STYLES.ink}33`, borderRadius: 10, padding: "1px 7px" }}>{unitLabel}</span>}
@@ -156,7 +157,7 @@ export default function ShotListTab({ posts, shots, units = [], campaigns, media
       const head = groupBy === "post" ? `${g.post.title}${g.post.publishDate ? ` (${formatPostDate(g.post.publishDate)})` : ""}` : g.post.publishDate ? formatPostDate(g.post.publishDate) : "No date yet";
       lines.push("", head);
       g.items.forEach((s) => {
-        const meta = [s.mediaType === "photo" ? "photo" : s.mediaType === "video" ? "video" : "photo or video", ...s.people, ...s.tags].join(", ");
+        const meta = [s.mediaType === "photo" ? "photo" : s.mediaType === "video" ? "video" : "photo or video", ...(s.aspectRatio ? [s.aspectRatio] : []), ...s.people, ...s.tags].join(", ");
         lines.push(`${s.completed ? "[x]" : "[ ]"} ${s.description} (${meta})${groupBy === "date" ? ` — ${g.items.length ? postById[s.postId].title : ""}` : ""}`);
       });
     });
@@ -265,7 +266,7 @@ export default function ShotListTab({ posts, shots, units = [], campaigns, media
         <MediaPicker
           media={media}
           initialSelected={linksByShot[pickerShot.id] || []}
-          requirements={{ mediaType: pickerShot.mediaType, people: pickerShot.people, tags: pickerShot.tags }}
+          requirements={{ mediaType: pickerShot.mediaType, people: pickerShot.people, tags: pickerShot.tags, aspectRatio: pickerShot.aspectRatio }}
           shotLabel={pickerShot.description}
           allowAi={!!postById[pickerShot.postId]?.aiImagesAllowed}
           onClose={() => setPickerShot(null)}

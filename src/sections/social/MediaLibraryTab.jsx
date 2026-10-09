@@ -29,6 +29,7 @@ function MediaCard({ item, locations, onOpen }) {
         <span style={{ position: "absolute", top: 6, left: 6, background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 11, padding: "2px 7px", borderRadius: 10, display: "flex", alignItems: "center", gap: 4 }}>
           <Icon size={11} /> {item.assetKind === "finished" ? item.postFormat || "Finished" : item.mediaType === "video" ? "Video" : "Photo"}
         </span>
+        {item.aspectRatio && <span style={{ position: "absolute", bottom: 6, right: 6, background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 8 }}>{item.aspectRatio}</span>}
         {item.isAi && <span style={{ position: "absolute", bottom: 6, left: 6, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 8 }}>AI</span>}
         {link && (
           <a href={link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label={linksToExactFile(item, locations) ? "Open the file" : "Open the folder"} title={linksToExactFile(item, locations) ? "Open the file" : "Open the folder"} style={{ position: "absolute", top: 6, right: 6, background: "rgba(255,255,255,0.9)", color: STYLES.ink, borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>

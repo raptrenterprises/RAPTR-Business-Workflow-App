@@ -23,7 +23,7 @@ export const POST_TYPES = ["Reel", "Carousel", "Image post", "Story", "Pinterest
 //   shots: "single" | "multi" -> shot list item(s) on the post itself (when there are no units)
 export const TYPE_CONFIG = {
   "Image post": { caption: true, seeders: true, poll: true, overlay: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)", manual: true },
-  Story: { poll: true, music: true, overlay: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)", manual: true },
+  Story: { sticker: true, music: true, overlay: true, shots: "single", shotLabel: "Shot list item", finalLabel: "Final edited image (link)", manual: true },
   Carousel: { caption: true, seeders: true, poll: true, music: true, units: "slide", manual: true },
   Reel: { caption: true, seeders: true, poll: true, music: true, units: "beat", finalLabel: "Final edited video (link)", manual: true },
   "Blog post": { blog: true, shots: "single", shotLabel: "Thumbnail (shot list item)", finalLabel: "Thumbnail image (link)" },
@@ -77,6 +77,79 @@ export function normalizeStatus(postType, status) {
 export const isOnCalendarStatus = (status) => status === "scheduled" || status === "ready_to_post";
 export const STATUS_LABEL = { idea: "Idea", planned: "Planned", filmed: "Filmed", drafted: "Drafted", edited: "Edited", scheduled: "Scheduled", ready_to_post: "Ready to manually post", live: "Live" };
 export const STATUS_COLOR = { idea: "#5A5A5A", planned: "#3B6E8F", filmed: "#6B4E8E", drafted: "#6B4E8E", edited: "#B8860B", scheduled: "#C1562E", ready_to_post: "#2E7D8C", live: "#3E6B4F" };
+// ---- Story stickers ----
+// The sticker types and their fields follow The Digital Dept's guide to Instagram's interactive story stickers:
+// https://thedigitaldept.com/instagram-interactive-story-stickers/
+// Field kinds: text | textarea | url | date | time | select. "poll" has its own editor (a question plus 2 to 4 answers).
+// Values are stored in posts.sticker_details under each field's key.
+export const STICKER_POLL_MIN = 2;
+export const STICKER_POLL_MAX = 4;
+export const STICKER_TYPES = [
+  { value: "location", label: "Location", hint: "Tapping it opens a map of the area.", fields: [
+    { key: "place", label: "Location / place", kind: "text", placeholder: "e.g. Summerville Ranch, Austin TX" },
+  ] },
+  { value: "mention", label: "Mention", hint: "Tapping it opens that account's profile.", fields: [
+    { key: "account", label: "Account to mention", kind: "text", placeholder: "@username" },
+  ] },
+  { value: "add_yours", label: "Add Yours", hint: "Viewers answer the prompt with a story of their own.", fields: [
+    { key: "prompt", label: "Prompt", kind: "text", placeholder: "e.g. Show us your murder mystery outfit" },
+  ] },
+  { value: "frames", label: "Frames", hint: "A photo in a Polaroid-style frame that is revealed when a viewer shakes their phone.", fields: [
+    { key: "caption", label: "Frame caption", kind: "text" },
+    { key: "timestamp", label: "Timestamp", kind: "text", placeholder: "e.g. October 31, 2026" },
+  ] },
+  { value: "questions", label: "Questions", hint: "Instagram's default prompt is “Ask me a question”.", fields: [
+    { key: "prompt", label: "Question prompt", kind: "text", placeholder: "Ask me a question" },
+  ] },
+  { value: "cutouts", label: "Cutouts", hint: "Turns one distinct object in a photo or video into a sticker.", fields: [
+    { key: "object", label: "What's being cut out", kind: "text", placeholder: "e.g. the magnifying glass" },
+  ] },
+  { value: "get_orders", label: "Get Orders", hint: "Viewers can send an order request.", fields: [
+    { key: "title", label: "Product title", kind: "text" },
+    { key: "price", label: "Price", kind: "text", placeholder: "e.g. $49" },
+    { key: "photos", label: "Product photos (up to 10)", kind: "textarea", placeholder: "Which photos to include" },
+  ] },
+  { value: "poll", label: "Poll", hint: "Instagram allows 2 to 4 answers; the defaults are Yes and No.", fields: [] },
+  { value: "add_yours_music", label: "Add Yours Music", hint: "Viewers answer the prompt with a song.", fields: [
+    { key: "prompt", label: "Prompt", kind: "text", placeholder: "e.g. Best Halloween party songs" },
+  ] },
+  { value: "link", label: "Link", hint: "Left blank, the sticker text shows the site's address.", fields: [
+    { key: "url", label: "Link", kind: "url", placeholder: "https://raptrmysteries.com/…" },
+    { key: "text", label: "Sticker text (optional)", kind: "text" },
+  ] },
+  { value: "slider", label: "Slider", hint: "Viewers slide the emoji to rate or agree.", fields: [
+    { key: "question", label: "Question", kind: "text" },
+    { key: "emoji", label: "Slider emoji", kind: "text", placeholder: "e.g. 🕵️" },
+  ] },
+  { value: "reveal", label: "Reveal", hint: "Viewers must send a message to uncover the hidden story. Use sparingly.", fields: [
+    { key: "prompt", label: "Prompt viewers respond to", kind: "text" },
+    { key: "hidden", label: "What's hidden", kind: "textarea" },
+  ] },
+  { value: "hashtag", label: "Hashtag", hint: "Tapping it opens other posts using the hashtag.", fields: [
+    { key: "hashtag", label: "Hashtag", kind: "text", placeholder: "#raptrmysteries" },
+  ] },
+  { value: "donation", label: "Donation", hint: "The fundraiser also shows in your bio for 30 days.", fields: [
+    { key: "cause", label: "Cause / charity", kind: "text" },
+    { key: "url", label: "Fundraiser link", kind: "url", placeholder: "https://…" },
+  ] },
+  { value: "countdown", label: "Countdown", hint: "Viewers can turn on a reminder for when it ends, and share it to their own story.", fields: [
+    { key: "name", label: "Countdown name", kind: "text", placeholder: "e.g. Halloween party" },
+    { key: "endDate", label: "End date", kind: "date" },
+    { key: "endTime", label: "End time", kind: "time" },
+  ] },
+  { value: "food_orders", label: "Food Orders", hint: "Needs the Instagram business profile connected to an ordering partner.", fields: [
+    { key: "partner", label: "Ordering partner", kind: "select", options: ["DoorDash", "Grubhub", "Other"] },
+  ] },
+];
+export const stickerDef = (type) => STICKER_TYPES.find((t) => t.value === type) || null;
+export const stickerLabel = (type) => stickerDef(type)?.label || "";
+// A fresh details object for a sticker type (a new poll starts with Yes / No).
+export const blankStickerDetails = (type) => (type === "poll" ? { question: "", options: ["Yes", "No"] } : {});
+// True when a details object holds anything worth warning about before it is cleared.
+export const stickerHasDetails = (details) =>
+  Object.values(details || {}).some((v) => (Array.isArray(v) ? v.some((x) => String(x).trim()) : String(v ?? "").trim()));
+export const stickerUrlFields = (type) => (stickerDef(type)?.fields || []).filter((f) => f.kind === "url").map((f) => f.key);
+
 export const SHOT_MEDIA_TYPES = [{ value: "", label: "Photo or video" }, { value: "photo", label: "Photo" }, { value: "video", label: "Video" }];
 
 export function formatPostDate(dateStr) {

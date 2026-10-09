@@ -3,7 +3,8 @@ import { X, FilePlus2, FolderOpen, Check, AlertTriangle } from "lucide-react";
 import { STYLES, uid, selectStyle } from "../../constants";
 import { uploadAttachment } from "../../lib/storageApi";
 import { insertMediaBatch } from "../../lib/mediaApi";
-import { makeThumbnail, isVideoFile } from "../../lib/thumbnails";
+import { makeThumbnailWithSize, isVideoFile } from "../../lib/thumbnails";
+import { describeRatio } from "../../lib/aspectRatio";
 import { cleanSubfolder, pathKey, isGenericName, stripExtension, collectionOf } from "../../lib/mediaLinks";
 import { MEDIA_PEOPLE, normalizeTag } from "./socialConstants";
 
@@ -18,6 +19,7 @@ function Tile({ entry, status, onToggle }) {
       </div>
       <div style={{ padding: "4px 6px" }}>
         <div title={entry.name} style={{ fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</div>
+        {entry.aspectRatio && <div style={{ fontSize: 10, color: STYLES.slate }}>{entry.aspectRatio}</div>}
         {status.sub && <div title={status.sub} style={{ fontSize: 10, color: STYLES.slate, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status.sub}/</div>}
         {status.duplicate && <div style={{ fontSize: 10.5, color: STYLES.wax, fontWeight: 700 }}>{status.duplicate}</div>}
         {!status.duplicate && status.generic && <div style={{ fontSize: 10.5, color: "#B8860B", fontWeight: 700 }}>Check this name</div>}
@@ -69,7 +71,7 @@ export default function BulkAddModal({ existing, tagSuggestions, currentUser, on
       }
       return {
         key: uid(), file, name: file.name, subfolder: sub, mediaType: isVideoFile(file) || /\.(mp4|mov|m4v|webm)$/i.test(file.name) ? "video" : "photo",
-        thumbUrl: "", thumbBlob: null, thumbState: "pending", tags: [], people: [], isAi: false, selected: false,
+        thumbUrl: "", thumbBlob: null, thumbState: "pending", width: null, height: null, aspectRatio: "", tags: [], people: [], isAi: false, selected: false,
         shotDate: new Date(file.lastModified).toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
       };
     });
@@ -80,9 +82,9 @@ export default function BulkAddModal({ existing, tagSuggestions, currentUser, on
       while (next < fresh.length && !cancelled.current) {
         const entry = fresh[next++];
         try {
-          const blob = await makeThumbnail(entry.file);
+          const { blob, width, height } = await makeThumbnailWithSize(entry.file);
           if (cancelled.current) return;
-          patchEntry(entry.key, { thumbBlob: blob, thumbUrl: URL.createObjectURL(blob), thumbState: "ok" });
+          patchEntry(entry.key, { thumbBlob: blob, thumbUrl: URL.createObjectURL(blob), thumbState: "ok", width, height, aspectRatio: describeRatio(width, height) });
         } catch (_) {
           patchEntry(entry.key, { thumbState: "none" });
         }
@@ -139,7 +141,7 @@ export default function BulkAddModal({ existing, tagSuggestions, currentUser, on
           }
           items.push({
             id: uid(), title: stripExtension(e.name), mediaType: e.mediaType, assetKind: kind, postFormat: "", sourceUrl: "", fileName: e.name,
-            subfolder: subfolderOf(e), onedriveItemId: "", thumbnailUrl, thumbnailPath, isAi: e.isAi,
+            subfolder: subfolderOf(e), onedriveItemId: "", thumbnailUrl, thumbnailPath, isAi: e.isAi, aspectRatio: e.aspectRatio, width: e.width, height: e.height,
             people: e.people, tags: e.tags, shotDate: e.shotDate, notes: "", createdBy: currentUser, createdAt: new Date().toISOString(),
           });
           done += 1;

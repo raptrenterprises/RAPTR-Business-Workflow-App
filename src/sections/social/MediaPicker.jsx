@@ -20,6 +20,7 @@ function Tile({ item, selected, onToggle }) {
         {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Icon size={28} />}
       </div>
       <div style={{ fontSize: 11.5, padding: "4px 6px", wordBreak: "break-word", lineHeight: 1.25 }}>{item.title}</div>
+      {item.aspectRatio && <span style={{ position: "absolute", bottom: 26, right: 5, background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 8 }}>{item.aspectRatio}</span>}
       {item.isAi && <span style={{ position: "absolute", top: 5, left: 5, background: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 8 }}>AI</span>}
       {selected && <div style={{ position: "absolute", top: 5, right: 5, background: STYLES.green, color: "#fff", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={14} /></div>}
     </div>
@@ -35,6 +36,7 @@ export default function MediaPicker({ media, initialSelected, requirements, shot
   const [kindFilter, setKindFilter] = useState(initialKind || "all");
   const [peopleFilter, setPeopleFilter] = useState(requirements.people);
   const [tagFilter, setTagFilter] = useState(requirements.tags);
+  const [ratioOnly, setRatioOnly] = useState(false); // off by default so nothing is hidden unexpectedly
 
   const tagList = useMemo(() => {
     const counts = {};
@@ -52,10 +54,11 @@ export default function MediaPicker({ media, initialSelected, requirements, shot
       if (typeFilter !== "all" && i.mediaType !== typeFilter) return false;
       if (!peopleFilter.every((p) => i.people.includes(p))) return false;
       if (!tagFilter.every((t) => i.tags.includes(t))) return false;
+      if (ratioOnly && requirements.aspectRatio && i.aspectRatio && i.aspectRatio !== requirements.aspectRatio) return false;
       if (q && !`${i.title} ${i.fileName} ${i.notes} ${i.tags.join(" ")}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [media, search, typeFilter, kindFilter, peopleFilter, tagFilter, selected, allowAi]);
+  }, [media, search, typeFilter, kindFilter, peopleFilter, tagFilter, selected, allowAi, ratioOnly, requirements.aspectRatio]);
 
   const toggleIn = (list, setList, v) => setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const toggleSelected = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : single ? [id] : [...s, id]));
@@ -95,6 +98,12 @@ export default function MediaPicker({ media, initialSelected, requirements, shot
           <span style={{ fontSize: 12.5, color: STYLES.slate, minWidth: 64 }}>Who's in it</span>
           {MEDIA_PEOPLE.map((p) => <FilterChip key={p} active={peopleFilter.includes(p)} color={STYLES.blue} onClick={() => toggleIn(peopleFilter, setPeopleFilter, p)}>{p}</FilterChip>)}
         </div>
+        {requirements.aspectRatio && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontSize: 12.5, color: STYLES.slate, minWidth: 64 }}>Aspect ratio</span>
+            <FilterChip active={ratioOnly} color={STYLES.green} onClick={() => setRatioOnly(!ratioOnly)}>Only {requirements.aspectRatio}</FilterChip>
+          </div>
+        )}
         {tagList.length > 0 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
             <span style={{ fontSize: 12.5, color: STYLES.slate, minWidth: 64 }}>Tags</span>

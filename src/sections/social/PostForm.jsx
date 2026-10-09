@@ -3,7 +3,9 @@ import { X, Plus, Trash2, ChevronRight, ChevronUp, ChevronDown, Search, External
 import { STYLES, uid, selectStyle } from "../../constants";
 import MediaPicker from "./MediaPicker";
 import { resolveMediaUrl } from "../../lib/mediaLinks";
+import { ASPECT_RATIOS, defaultAspectRatio } from "../../lib/aspectRatio";
 import {
+  STICKER_TYPES, STICKER_POLL_MIN, STICKER_POLL_MAX, stickerDef, stickerLabel, blankStickerDetails, stickerHasDetails, stickerUrlFields,
   POST_TYPES, MEDIA_PEOPLE, SHOT_MEDIA_TYPES, PIN_BOARDS, PIN_TOPICS, PIN_TOPICS_MAX, SQS_CATEGORIES, SQS_TAGS, SEO_TITLE_TARGET, SEO_DESCRIPTION_TARGET, METRICS_BY_TYPE, createsCalendarEvent, STATUS_LABEL, STATUS_COLOR, SEEDER_FIELDS, UNIT_DEFAULT_COUNT, UNIT_NOUN,
   typeConfig, statusFlow, nextStatuses, normalizeStatus, isOnCalendarStatus, normalizeTag,
 } from "./socialConstants";
@@ -113,6 +115,13 @@ function ShotRow({ shot, mediaById, onChange, onRemove, onFind, canRemove }) {
         <select value={shot.mediaType} onChange={(e) => onChange({ mediaType: e.target.value })} style={selectStyle()}>
           {SHOT_MEDIA_TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: STYLES.slate }}>
+          Aspect ratio
+          <select value={shot.aspectRatio || ""} onChange={(e) => onChange({ aspectRatio: e.target.value })} style={selectStyle()}>
+            <option value="">Any</option>
+            {[...new Set([...(shot.aspectRatio && !ASPECT_RATIOS.includes(shot.aspectRatio) ? [shot.aspectRatio] : []), ...ASPECT_RATIOS])].map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </label>
         {MEDIA_PEOPLE.map((p) => <ToggleChip key={p} small active={shot.people.includes(p)} onClick={() => togglePerson(p)}>{p}</ToggleChip>)}
         <CommaTagInput tags={shot.tags} onChange={(tags) => onChange({ tags })} placeholder="tags, comma separated" style={{ ...selectStyle(), flex: "1 1 140px", minWidth: 120 }} />
       </div>
@@ -300,6 +309,65 @@ function PollToggle({ draft, set }) {
   );
 }
 
+// Story stickers: a checkbox, then a type drop-down, then the fields that sticker type needs.
+// Switching type clears the details (after a warning), because each type has its own fields.
+function StickerSection({ draft, set }) {
+  const def = stickerDef(draft.stickerType);
+  const details = draft.stickerDetails || {};
+  const setDetail = (key, value) => set({ stickerDetails: { ...details, [key]: value } });
+  const changeSticker = (type) => {
+    if (type === draft.stickerType) return;
+    if (draft.stickerType && stickerHasDetails(details) && !window.confirm("Changing the sticker type clears the sticker details you've entered. Continue?")) return;
+    set({ stickerType: type, stickerDetails: blankStickerDetails(type) });
+  };
+  const opts = Array.isArray(details.options) && details.options.length > 0 ? details.options : ["", ""];
+  const setOpts = (next) => setDetail("options", next);
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: STYLES.ink, cursor: "pointer" }}>
+        <input type="checkbox" checked={draft.stickerEnabled} onChange={(e) => set({ stickerEnabled: e.target.checked })} style={{ width: 16, height: 16, accentColor: STYLES.wax }} /> Sticker
+      </label>
+      {draft.stickerEnabled && (
+        <div style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: 10, marginTop: 8 }}>
+          <Field label="Sticker type" hint={def?.hint}>
+            <select value={draft.stickerType} onChange={(e) => changeSticker(e.target.value)} style={inputStyle}>
+              <option value="">Choose a sticker…</option>
+              {STICKER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </Field>
+          {draft.stickerType === "poll" && (
+            <>
+              <Field label="Poll question"><input value={details.question || ""} onChange={(e) => setDetail("question", e.target.value)} style={inputStyle} placeholder="e.g. Who did it?" /></Field>
+              <label style={labelStyle}>Answer choices ({STICKER_POLL_MIN} to {STICKER_POLL_MAX})</label>
+              {opts.map((o, i) => (
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input value={o} onChange={(e) => setOpts(opts.map((x, j) => (j === i ? e.target.value : x)))} style={inputStyle} placeholder={i === 0 ? "Yes" : i === 1 ? "No" : `Choice ${i + 1}`} />
+                  <button type="button" disabled={opts.length <= STICKER_POLL_MIN} onClick={() => setOpts(opts.filter((_, j) => j !== i))} aria-label={`Remove choice ${i + 1}`} style={{ ...iconBtn, opacity: opts.length <= STICKER_POLL_MIN ? 0.3 : 1 }}><Trash2 size={16} /></button>
+                </div>
+              ))}
+              <button type="button" disabled={opts.length >= STICKER_POLL_MAX} onClick={() => setOpts([...opts, ""])} style={{ ...selectStyle(), cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, opacity: opts.length >= STICKER_POLL_MAX ? 0.5 : 1 }}><Plus size={14} /> Add choice</button>
+            </>
+          )}
+          {def && def.fields.map((f) => (
+            <Field key={f.key} label={f.label}>
+              {f.kind === "textarea" ? (
+                <textarea value={details[f.key] || ""} onChange={(e) => setDetail(f.key, e.target.value)} rows={2} style={textareaStyle} placeholder={f.placeholder} />
+              ) : f.kind === "select" ? (
+                <select value={details[f.key] || ""} onChange={(e) => setDetail(f.key, e.target.value)} style={inputStyle}>
+                  <option value="">Choose…</option>
+                  {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input type={f.kind === "date" ? "date" : f.kind === "time" ? "time" : "text"} inputMode={f.kind === "url" ? "url" : undefined} value={details[f.key] || ""} onChange={(e) => setDetail(f.key, e.target.value)} style={f.kind === "date" || f.kind === "time" ? { ...inputStyle, maxWidth: 200 } : inputStyle} placeholder={f.placeholder} />
+              )}
+            </Field>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Performance metrics: shown once a post is Live. Values are typed in by hand for now.
 function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
   const cfg = METRICS_BY_TYPE[draft.postType];
@@ -330,6 +398,9 @@ function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
           </div>
         </div>
       ))}
+      {draft.stickerEnabled && draft.stickerType && (
+        <Field label={`${stickerLabel(draft.stickerType)} sticker results`}><textarea value={draft.metrics.sticker_results || ""} onChange={(e) => set({ metrics: { ...draft.metrics, sticker_results: e.target.value } })} rows={2} style={textareaStyle} placeholder={draft.stickerType === "poll" ? "e.g. Yes 62%, No 38%" : "e.g. 14 replies, 3 shares of the sticker"} /></Field>
+      )}
       {draft.pollEnabled && draft.postType !== "Blog post" && draft.postType !== "Pinterest pin" && (
         <Field label="Poll results"><textarea value={draft.metrics.poll_results || ""} onChange={(e) => set({ metrics: { ...draft.metrics, poll_results: e.target.value } })} rows={2} style={textareaStyle} placeholder="e.g. Yes 62%, No 38%" /></Field>
       )}
@@ -363,13 +434,13 @@ function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
 }
 
 const blankUnit = () => ({ id: uid(), textOverlay: "", script: "", editingNotes: "", finalUrl: "", finalMediaId: "" });
-const blankShot = (postId, unitId) => ({ id: uid(), postId, unitId: unitId || null, description: "", mediaType: "", people: [], tags: [], completed: false, mediaIds: [] });
+const blankShot = (postId, unitId, postType) => ({ id: uid(), postId, unitId: unitId || null, description: "", mediaType: "", aspectRatio: defaultAspectRatio(postType), people: [], tags: [], completed: false, mediaIds: [] });
 const blankPost = (campaignId) => ({
   id: uid(), title: "", postType: "Reel", status: "idea", publishDate: "", publishTime: "", description: "", caption: "", seederComments: "",
   aiImagesAllowed: false, finalMediaId: "", blogDocUrl: "",
   seederRaptr: "", seederEvan: "", seederEvanReply: "", seederCathy: "", seederCathyReply: "", textOverlay: "", finalUrl: "",
   blogText: "", sqsCategories: [], sqsTags: [], seoTitle: "", seoDescription: "", crossLinks: "", pinCategories: [], pinBoardPrimary: "", pinBoardsSecondary: [], pinDescription: "", pinTitle: "", pinLink: "", pinTopics: [], pinAltText: "",
-  musicAudio: "", pollEnabled: false, pollQuestion: "", pollOptions: [], metrics: {}, metricsUpdatedOn: "", attachments: [],
+  musicAudio: "", pollEnabled: false, pollQuestion: "", pollOptions: [], stickerEnabled: false, stickerType: "", stickerDetails: {}, metrics: {}, metricsUpdatedOn: "", attachments: [],
   notes: "", tags: [], campaignId: campaignId || "",
 });
 
@@ -381,10 +452,10 @@ function ensureStructure(postType, units, shots, postId) {
   let s = shots;
   if (cfg.units) {
     if (u.length === 0) u = Array.from({ length: UNIT_DEFAULT_COUNT[cfg.units] }, blankUnit);
-    const missing = u.filter((unit) => !s.some((x) => x.unitId === unit.id)).map((unit) => blankShot(postId, unit.id));
+    const missing = u.filter((unit) => !s.some((x) => x.unitId === unit.id)).map((unit) => blankShot(postId, unit.id, postType));
     s = [...s, ...missing];
   } else if (cfg.shots && s.length === 0) {
-    s = [blankShot(postId, null)];
+    s = [blankShot(postId, null, postType)];
   }
   return { units: u, shots: s };
 }
@@ -432,15 +503,19 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
   // The shot rows a post or unit needs: new posts get their blank rows with the post's own id.
   const fixPostId = (list) => list.map((s) => ({ ...s, postId: draft.id }));
   function changeType(postType) {
+    // Shots still on the old type's default ratio (or with none) follow the new type's default; a ratio picked by hand stays.
+    const oldDefault = defaultAspectRatio(draft.postType);
+    const newDefault = defaultAspectRatio(postType);
     setDraft((d) => ({ ...d, postType, status: normalizeStatus(postType, d.status) }));
     setStructure((st) => {
-      const next = ensureStructure(postType, st.units, st.shots, draft.id);
+      const moved = st.shots.map((s) => (!s.aspectRatio || s.aspectRatio === oldDefault ? { ...s, aspectRatio: newDefault } : s));
+      const next = ensureStructure(postType, st.units, moved, draft.id);
       return { units: next.units, shots: fixPostId(next.shots) };
     });
   }
 
   const patchShot = (id, patch) => setShots((list) => list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  const addShot = (unitId) => setShots((list) => [...list, blankShot(draft.id, unitId)]);
+  const addShot = (unitId) => setShots((list) => [...list, blankShot(draft.id, unitId, draft.postType)]);
   const dropShotFromList = (shot) => {
     setShots((list) => list.filter((s) => s.id !== shot.id));
     if (origShotIds.has(shot.id)) setRemovedShotIds((ids) => [...ids, shot.id]);
@@ -449,7 +524,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
   const addUnit = () => {
     const unit = blankUnit();
     setExpanded((m) => ({ ...m, [unit.id]: true }));
-    setStructure((st) => ({ units: [...st.units, unit], shots: [...st.shots, blankShot(draft.id, unit.id)] }));
+    setStructure((st) => ({ units: [...st.units, unit], shots: [...st.shots, blankShot(draft.id, unit.id, draft.postType)] }));
   };
   const moveUnit = (index, dir) => setUnits((list) => {
     const next = list.slice();
@@ -472,7 +547,9 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
     if (!draft.title.trim()) { setError("Give this post a title."); return; }
     if (draft.publishTime && !draft.publishDate) { setError("Add a publish date to go with the time."); return; }
     if (isOnCalendarStatus(draft.status) && (!draft.publishDate || !draft.publishTime)) { setError("Add a publish date and time first. The post goes on the calendar at that time."); return; }
-    if ([draft.finalUrl, draft.pinLink, draft.blogDocUrl, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
+    const stickerLinks = draft.stickerEnabled ? stickerUrlFields(draft.stickerType).map((k) => draft.stickerDetails?.[k] || "") : [];
+    if ([draft.finalUrl, draft.pinLink, draft.blogDocUrl, ...stickerLinks, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
+    if (draft.stickerEnabled && !draft.stickerType) { setError("Choose a sticker type, or untick Sticker."); return; }
     setBusy(true);
     setError("");
     try {
@@ -611,12 +688,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
               </>
             )}
             {showOverlay && <Field label="Text overlay"><textarea value={draft.textOverlay} onChange={(e) => set({ textOverlay: e.target.value })} rows={2} style={textareaStyle} /></Field>}
-            {cfg.poll && !cfg.caption && (
-              <div style={{ marginBottom: 14 }}>
-                <PollToggle draft={draft} set={set} />
-                {draft.pollEnabled && <div style={{ marginTop: 8 }}><PollFields draft={draft} set={set} /></div>}
-              </div>
-            )}
+            {(cfg.sticker || draft.stickerEnabled) && <StickerSection draft={draft} set={set} />}
             {cfg.pin && (
               <>
                 <Field label="Pin title"><input value={draft.pinTitle} onChange={(e) => set({ pinTitle: e.target.value })} style={inputStyle} /></Field>
@@ -717,7 +789,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
           <MediaPicker
             media={media}
             initialSelected={shot.mediaIds}
-            requirements={{ mediaType: shot.mediaType, people: shot.people, tags: shot.tags }}
+            requirements={{ mediaType: shot.mediaType, people: shot.people, tags: shot.tags, aspectRatio: shot.aspectRatio }}
             shotLabel={shot.description}
             allowAi={draft.aiImagesAllowed}
             onClose={() => setPickerShotId(null)}

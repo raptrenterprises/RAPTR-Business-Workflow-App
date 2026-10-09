@@ -17,7 +17,7 @@ function drawScaled(source, w, h) {
   canvas.height = Math.round(h * scale);
   canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't create a thumbnail."))), "image/jpeg", 0.8);
+    canvas.toBlob((b) => (b ? resolve({ blob: b, width: w, height: h }) : reject(new Error("Couldn't create a thumbnail."))), "image/jpeg", 0.8);
   });
 }
 
@@ -44,12 +44,19 @@ function videoThumb(file) {
     v.onerror = () => finish(reject, new Error("This browser can't read that video format."));
     v.onloadedmetadata = () => { v.currentTime = Math.min(1, (v.duration || 2) / 2); };
     v.onseeked = () => {
-      drawScaled(v, v.videoWidth, v.videoHeight).then((b) => finish(resolve, b), (e) => finish(reject, e));
+      drawScaled(v, v.videoWidth, v.videoHeight).then((r) => finish(resolve, r), (e) => finish(reject, e));
     };
     v.src = url;
   });
 }
 
+// The preview plus the file's real pixel size, read from the same decode (used to auto-detect the aspect ratio).
+// Resolves { blob, width, height }.
+export function makeThumbnailWithSize(file) {
+  return isVideoFile(file) || /\.(mp4|mov|m4v|webm)$/i.test(file.name || "") ? videoThumb(file) : imageThumb(file);
+}
+
+// Just the preview image (kept for callers that don't need the size).
 export function makeThumbnail(file) {
-  return isVideoFile(file) ? videoThumb(file) : imageThumb(file);
+  return makeThumbnailWithSize(file).then((r) => r.blob);
 }

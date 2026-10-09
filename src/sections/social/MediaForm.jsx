@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { X, ImagePlus, Trash2, ExternalLink, Copy } from "lucide-react";
 import { STYLES, uid, selectStyle } from "../../constants";
 import { uploadAttachment, deleteAttachment } from "../../lib/storageApi";
-import { makeThumbnail, isVideoFile } from "../../lib/thumbnails";
+import { makeThumbnailWithSize, isVideoFile } from "../../lib/thumbnails";
+import { ASPECT_RATIOS, describeRatio } from "../../lib/aspectRatio";
 import { resolveMediaUrl, expectedPath, cleanSubfolder } from "../../lib/mediaLinks";
 import { MEDIA_TYPES, ASSET_KINDS, POST_FORMATS, MEDIA_PEOPLE, normalizeTag } from "./socialConstants";
 
@@ -29,7 +30,7 @@ function ToggleChip({ active, onClick, children, color }) {
 
 const blankDraft = () => ({
   id: uid(), title: "", mediaType: "photo", assetKind: "raw", subfolder: "", isAi: false, postFormat: "", sourceUrl: "", fileName: "",
-  onedriveItemId: "", thumbnailUrl: "", thumbnailPath: "", people: [], tags: [], shotDate: "", notes: "",
+  onedriveItemId: "", thumbnailUrl: "", thumbnailPath: "", aspectRatio: "", width: null, height: null, people: [], tags: [], shotDate: "", notes: "",
 });
 
 export default function MediaForm({ item, currentUser, tagSuggestions, locations, onSave, onDelete, onClose }) {
@@ -64,9 +65,10 @@ export default function MediaForm({ item, currentUser, tagSuggestions, locations
     if (!draft.title.trim()) patch.title = file.name.replace(/\.[^.]+$/, "");
     set(patch);
     try {
-      const blob = await makeThumbnail(file);
+      const { blob, width, height } = await makeThumbnailWithSize(file);
       setPendingThumb({ blob, previewUrl: URL.createObjectURL(blob), name: file.name.replace(/\.[^.]+$/, "") + ".jpg" });
       setThumbRemoved(false);
+      set({ width, height, aspectRatio: describeRatio(width, height) }); // auto-detected from the file's pixel size
     } catch (err) {
       setPendingThumb(null);
       setThumbNote(err.message + " You can still save this item without a thumbnail.");
@@ -157,6 +159,16 @@ export default function MediaForm({ item, currentUser, tagSuggestions, locations
             </div>
           )}
         </div>
+
+        <Field label="Aspect ratio">
+          <select value={draft.aspectRatio || ""} onChange={(e) => set({ aspectRatio: e.target.value })} style={{ ...inputStyle, maxWidth: 220 }}>
+            <option value="">Unknown</option>
+            {[...new Set([...(draft.aspectRatio && !ASPECT_RATIOS.includes(draft.aspectRatio) ? [draft.aspectRatio] : []), ...ASPECT_RATIOS])].map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 4 }}>
+            {draft.width && draft.height ? `Detected from the file: ${draft.width} × ${draft.height} px. ` : "Filled in automatically when you choose the file above. "}You can change it if it's wrong.
+          </div>
+        </Field>
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, cursor: "pointer" }}>
           <input type="checkbox" checked={!!draft.isAi} onChange={(e) => set({ isAi: e.target.checked })} style={{ width: 17, height: 17, accentColor: STYLES.wax }} /> AI-generated

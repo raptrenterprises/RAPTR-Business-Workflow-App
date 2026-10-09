@@ -39,6 +39,9 @@ function postFromRow(r) {
     pollEnabled: !!r.poll_enabled,
     pollQuestion: r.poll_question || "",
     pollOptions: r.poll_options || [],
+    stickerEnabled: !!r.sticker_enabled,
+    stickerType: r.sticker_type || "",
+    stickerDetails: r.sticker_details && typeof r.sticker_details === "object" && !Array.isArray(r.sticker_details) ? r.sticker_details : {},
     metrics: r.metrics && typeof r.metrics === "object" ? r.metrics : {},
     metricsUpdatedOn: r.metrics_updated_on || "",
     attachments: Array.isArray(r.attachments) ? r.attachments.map((a, i) => ({ id: a.id || `att-${i}`, label: a.label || "", url: a.url || "" })) : [],
@@ -49,6 +52,16 @@ function postFromRow(r) {
     createdBy: r.created_by,
     createdAt: r.created_at,
   };
+}
+
+// Trims text values and drops empty ones, so the saved details only hold what was filled in.
+function cleanStickerDetails(d) {
+  const out = {};
+  Object.entries(d || {}).forEach(([k, v]) => {
+    if (Array.isArray(v)) { const list = v.map((x) => String(x).trim()).filter(Boolean); if (list.length) out[k] = list; }
+    else if (String(v ?? "").trim()) out[k] = String(v).trim();
+  });
+  return out;
 }
 
 function postToRow(p) {
@@ -89,6 +102,9 @@ function postToRow(p) {
     poll_enabled: !!p.pollEnabled,
     poll_question: p.pollQuestion || null,
     poll_options: (p.pollOptions || []).map((o) => o.trim()).filter(Boolean),
+    sticker_enabled: !!p.stickerEnabled && !!p.stickerType,
+    sticker_type: p.stickerEnabled && p.stickerType ? p.stickerType : null,
+    sticker_details: p.stickerEnabled && p.stickerType ? cleanStickerDetails(p.stickerDetails) : {},
     metrics: p.metrics || {},
     metrics_updated_on: p.metricsUpdatedOn || null,
     attachments: (p.attachments || []).filter((a) => a.label.trim() || a.url.trim()).map((a) => ({ id: a.id, label: a.label.trim(), url: a.url.trim() })),
@@ -113,6 +129,7 @@ function shotFromRow(r) {
     unitId: r.unit_id || null,
     description: r.description,
     mediaType: r.media_type || "",
+    aspectRatio: r.aspect_ratio || "",
     people: r.people || [],
     tags: r.tags || [],
     completed: r.completed,
@@ -192,6 +209,7 @@ export async function savePost(post, units, shots, removed, isNew, originalLinks
       unit_id: s.unitId || null,
       description: s.description.trim(),
       media_type: s.mediaType || null,
+      aspect_ratio: s.aspectRatio || null,
       people: s.people || [],
       tags: s.tags || [],
       completed: !!s.completed,
