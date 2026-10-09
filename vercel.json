@@ -1,0 +1,4 @@
+{
+  "crons": [{ "path": "/api/gsc-sync", "schedule": "0 11 * * *" }],
+  "functions": { "api/gsc-sync.js": { "maxDuration": 60 } }
+}

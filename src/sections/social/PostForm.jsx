@@ -414,6 +414,13 @@ function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
           )}
           {keywords.map((k) => {
             const auto = k.ctr === "" && Number(k.impressions) > 0 && k.clicks !== "" ? String(Math.round((Number(k.clicks) / Number(k.impressions)) * 10000) / 100) : "";
+            if (k.source === "gsc") {
+              return (
+                <div key={k.id} style={{ display: "grid", gridTemplateColumns: "minmax(120px, 2fr) repeat(4, minmax(60px, 1fr)) 24px", gap: 6, marginBottom: 6, alignItems: "center", fontSize: 13, borderLeft: `3px solid ${STYLES.green}`, paddingLeft: 6 }}>
+                  <span style={{ wordBreak: "break-word" }}>{k.keyword}</span><span>{k.impressions}</span><span>{k.clicks}</span><span>{k.ctr}</span><span>{k.avgPosition}</span><span />
+                </div>
+              );
+            }
             return (
               <div key={k.id} style={{ display: "grid", gridTemplateColumns: "minmax(120px, 2fr) repeat(4, minmax(60px, 1fr)) 24px", gap: 6, marginBottom: 6, alignItems: "center" }}>
                 <input value={k.keyword} onChange={(e) => patchKw(k.id, { keyword: e.target.value })} placeholder="keyword" style={kwInput} />
@@ -426,7 +433,7 @@ function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
             );
           })}
           <button type="button" onClick={() => onKeywordsChange([...keywords, { id: uid(), keyword: "", impressions: "", clicks: "", ctr: "", avgPosition: "" }])} style={{ ...selectStyle(), cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13 }}><Plus size={14} /> Add keyword</button>
-          <div style={{ fontSize: 11.5, color: STYLES.slate, marginTop: 4 }}>Leave click rate blank to have it worked out from clicks and impressions.</div>
+          <div style={{ fontSize: 11.5, color: STYLES.slate, marginTop: 4 }}>Leave click rate blank to have it worked out from clicks and impressions. Rows with a green edge come from Search Console and refresh every morning, so they can't be edited here.</div>
         </div>
       )}
     </Section>
@@ -437,7 +444,7 @@ const blankUnit = () => ({ id: uid(), textOverlay: "", script: "", editingNotes:
 const blankShot = (postId, unitId, postType) => ({ id: uid(), postId, unitId: unitId || null, description: "", mediaType: "", aspectRatio: defaultAspectRatio(postType), people: [], tags: [], completed: false, mediaIds: [] });
 const blankPost = (campaignId) => ({
   id: uid(), title: "", postType: "Reel", status: "idea", publishDate: "", publishTime: "", description: "", caption: "", seederComments: "",
-  aiImagesAllowed: false, finalMediaId: "", blogDocUrl: "",
+  aiImagesAllowed: false, finalMediaId: "", blogDocUrl: "", liveUrl: "",
   seederRaptr: "", seederEvan: "", seederEvanReply: "", seederCathy: "", seederCathyReply: "", textOverlay: "", finalUrl: "",
   blogText: "", sqsCategories: [], sqsTags: [], seoTitle: "", seoDescription: "", crossLinks: "", pinCategories: [], pinBoardPrimary: "", pinBoardsSecondary: [], pinDescription: "", pinTitle: "", pinLink: "", pinTopics: [], pinAltText: "",
   musicAudio: "", pollEnabled: false, pollQuestion: "", pollOptions: [], stickerEnabled: false, stickerType: "", stickerDetails: {}, metrics: {}, metricsUpdatedOn: "", attachments: [],
@@ -548,7 +555,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
     if (draft.publishTime && !draft.publishDate) { setError("Add a publish date to go with the time."); return; }
     if (isOnCalendarStatus(draft.status) && (!draft.publishDate || !draft.publishTime)) { setError("Add a publish date and time first. The post goes on the calendar at that time."); return; }
     const stickerLinks = draft.stickerEnabled ? stickerUrlFields(draft.stickerType).map((k) => draft.stickerDetails?.[k] || "") : [];
-    if ([draft.finalUrl, draft.pinLink, draft.blogDocUrl, ...stickerLinks, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
+    if ([draft.finalUrl, draft.pinLink, draft.blogDocUrl, draft.liveUrl, ...stickerLinks, ...units.map((u) => u.finalUrl), ...draft.attachments.map((a) => a.url)].some(badUrl)) { setError("Links should start with https://"); return; }
     if (draft.stickerEnabled && !draft.stickerType) { setError("Choose a sticker type, or untick Sticker."); return; }
     setBusy(true);
     setError("");
@@ -560,7 +567,7 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
       const cleanShots = inScope.filter((s) => s.description.trim());
       const dropped = shotList.filter((s) => !cleanShots.includes(s) && origShotIds.has(s.id)).map((s) => s.id);
       const removed = { unitIds: removedUnitIds, shotIds: [...new Set([...removedShotIds, ...dropped])] };
-      const keepKeywords = keywords.filter((k) => k.keyword.trim());
+      const keepKeywords = keywords.filter((k) => k.keyword.trim() && k.source !== "gsc"); // synced rows are managed by the sync, not saved from here
       const goneKeywords = [...removedKeywordIds, ...keywords.filter((k) => !k.keyword.trim() && origKeywordIds.has(k.id)).map((k) => k.id)];
       await onSave({ ...draft, title: draft.title.trim(), createdBy: currentUser, createdAt: new Date().toISOString() }, keepUnits, cleanShots, removed, isNew, originalLinks, { keywords: keepKeywords, removedKeywordIds: goneKeywords });
     } catch (err) {
@@ -678,6 +685,8 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
             {cfg.blog && (
               <>
                 <LinkField label="Blog post document (link)" value={draft.blogDocUrl} onChange={(v) => set({ blogDocUrl: v })} placeholder="Paste the OneDrive link to the blog post file" />
+                <LinkField label="Published blog post address (live link)" value={draft.liveUrl} onChange={(v) => set({ liveUrl: v })} placeholder="https://www.raptrmysteries.com/blog/…" />
+                <div style={{ fontSize: 11.5, color: STYLES.slate, margin: "-8px 0 12px" }}>Once this is filled in, its Google Search Console keywords fill in automatically (see Performance Metrics below).</div>
                 {draft.blogText && (
                   <Field label="Earlier typed text (plain text only; headings and links aren't kept)"><textarea value={draft.blogText} onChange={(e) => set({ blogText: e.target.value })} rows={6} style={textareaStyle} /></Field>
                 )}

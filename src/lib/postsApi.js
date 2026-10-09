@@ -22,6 +22,7 @@ function postFromRow(r) {
     aiImagesAllowed: !!r.ai_images_allowed,
     blogText: r.blog_text || "", // legacy typed-in text
     blogDocUrl: r.blog_doc_url || "",
+    liveUrl: r.live_url || "",
     sqsCategories: r.sqs_categories || [],
     sqsTags: r.sqs_tags || [],
     seoTitle: r.seo_title || "",
@@ -85,6 +86,7 @@ function postToRow(p) {
     ai_images_allowed: !!p.aiImagesAllowed,
     blog_text: p.blogText || null,
     blog_doc_url: p.blogDocUrl || null,
+    live_url: (p.liveUrl || "").trim() || null,
     sqs_categories: p.sqsCategories || [],
     sqs_tags: p.sqsTags || [],
     seo_title: p.seoTitle || null,
@@ -115,7 +117,7 @@ function postToRow(p) {
 }
 
 function keywordFromRow(r) {
-  return { id: r.id, postId: r.post_id, keyword: r.keyword, impressions: r.impressions ?? "", clicks: r.clicks ?? "", ctr: r.ctr ?? "", avgPosition: r.avg_position ?? "" };
+  return { id: r.id, postId: r.post_id, keyword: r.keyword, impressions: r.impressions ?? "", clicks: r.clicks ?? "", ctr: r.ctr ?? "", avgPosition: r.avg_position ?? "", source: r.source || "manual" };
 }
 
 function unitFromRow(r) {
