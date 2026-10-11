@@ -31,6 +31,13 @@ export const PACT_RESULTS = {
   },
 };
 
+// What the Pact card shows first: just Yes / Maybe / No. The full wording is behind "See more details".
+export const PACT_VERDICTS = {
+  strong: { word: "Yes", bg: "#2E8B57", fg: "#FFFFFF" },
+  moderate: { word: "Maybe", bg: "#F2C200", fg: "#3A2F00" },
+  below: { word: "No", bg: "#C62828", fg: "#FFFFFF" },
+};
+
 // 'YYYY-MM' for a 'YYYY-MM-DD' date string (defaults to today, Eastern time).
 export function pactMonthKey(dateStr = todayStr()) {
   return dateStr.slice(0, 7);

@@ -1,8 +1,9 @@
 import { supabase } from "./supabaseClient";
 
-// Everything here goes through the database's rules (migrations/022_pact_private.sql):
+// Everything here goes through the database's rules (migrations 022 and 023):
 // you can only ever read your own votes and status, and all writes are checked there.
 
+// ---- Votes and result (private) ----
 export async function fetchMyPactVotes() {
   const { data, error } = await supabase.from("pact_votes").select("month, interest").order("month", { ascending: true });
   if (error) throw error;
@@ -47,18 +48,59 @@ export async function setPactStatus(status) {
   return data;
 }
 
-export async function fetchCounters() {
-  const { data, error } = await supabase.from("pact_counters").select("person, count");
+export function subscribePactVotes(onChange) {
+  return subscribe("pact_votes", onChange);
+}
+
+// ---- Microaggression counters (shared by both of you) ----
+export async function fetchCounterCategories() {
+  const { data, error } = await supabase.from("pact_counter_categories").select("id, kind, name, created_at").order("created_at", { ascending: true });
   if (error) throw error;
-  const out = {};
-  data.forEach((r) => { out[r.person] = r.count; });
+  return data.map((r) => ({ id: r.id, kind: r.kind, name: r.name }));
+}
+
+export async function addCounterCategory(kind, name) {
+  const { error } = await supabase.from("pact_counter_categories").insert({ kind, name: name.trim() });
+  if (error) throw error;
+}
+
+export async function renameCounterCategory(id, name) {
+  const { error } = await supabase.from("pact_counter_categories").update({ name: name.trim() }).eq("id", id);
+  if (error) throw error;
+}
+
+// Also deletes that category's counts for both of you.
+export async function removeCounterCategory(id) {
+  const { error } = await supabase.from("pact_counter_categories").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Per day, category and person: how much was added. The API returns at most 1000 rows per request, so page through.
+export async function fetchCounterDaily() {
+  const PAGE = 1000;
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("pact_counter_daily").select("day, category_id, person, total")
+      .order("day", { ascending: true }).order("category_id", { ascending: true }).order("person", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    data.forEach((r) => out.push({ day: r.day, categoryId: r.category_id, person: r.person, total: r.total }));
+    if (data.length < PAGE) break;
+  }
   return out;
 }
 
-export async function bumpCounter(person) {
-  const { data, error } = await supabase.rpc("pact_bump_counter", { p_person: person });
+// amount is 1 (minor) or 5 (major). You can only add to your own counter.
+export async function addCounterEvent(categoryId, person, amount) {
+  const { error } = await supabase.rpc("pact_counter_add", { p_category: categoryId, p_person: person, p_amount: amount });
   if (error) throw error;
-  return data;
+}
+
+export function subscribeCounters(onChange) {
+  const u1 = subscribe("pact_counter_categories", onChange);
+  const u2 = subscribe("pact_counter_events", onChange);
+  return () => { u1(); u2(); };
 }
 
 function subscribe(table, onChange) {
@@ -68,5 +110,3 @@ function subscribe(table, onChange) {
     .subscribe();
   return () => supabase.removeChannel(channel);
 }
-export const subscribePactVotes = (onChange) => subscribe("pact_votes", onChange);
-export const subscribeCounters = (onChange) => subscribe("pact_counters", onChange);

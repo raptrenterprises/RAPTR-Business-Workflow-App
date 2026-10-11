@@ -1,10 +1,11 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell, LayoutDashboard, PartyPopper, Megaphone, HeartHandshake } from "lucide-react";
+import { User, ClipboardList, MessageSquare, CalendarDays, Dumbbell, LayoutDashboard, PartyPopper, Megaphone } from "lucide-react";
 import { STYLES, USERS, USER_DIRECTORY } from "./constants";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./Login";
 import ProfileMenu from "./components/ProfileMenu";
 import { SectionButton, CenterMsg } from "./components/Shared";
+import VelociraptorIcon from "./components/VelociraptorIcon";
 import { useNavIndicators } from "./hooks/useNavIndicators";
 import { useLiveEventIndicator } from "./hooks/useLiveEventIndicator";
 import { setAppBadge, clearAppBadge } from "./lib/appBadge";
@@ -15,7 +16,7 @@ import CalendarSection from "./sections/CalendarSection";
 const GymSection = lazy(() => import("./sections/GymSection"));
 const RaptrMeetSection = lazy(() => import("./sections/raptrmeet/RaptrMeetSection"));
 const SocialSection = lazy(() => import("./sections/social/SocialSection"));
-const PactSection = lazy(() => import("./sections/pact/PactSection"));
+const RaptrraptrSection = lazy(() => import("./sections/pact/RaptrraptrSection"));
 
 export default function RaptrApp() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = signed out
@@ -87,7 +88,7 @@ export default function RaptrApp() {
           <SectionButton active={section === "social"} onClick={() => setSection("social")} icon={<Megaphone size={15} />} label="Marketing" />
           <SectionButton active={section === "gym"} onClick={() => setSection("gym")} icon={<Dumbbell size={15} />} label="Gym" />
           <SectionButton active={section === "raptrmeet"} onClick={() => setSection("raptrmeet")} icon={<PartyPopper size={15} />} label="RAPTRMeet" />
-          <SectionButton active={section === "pact"} onClick={() => setSection("pact")} icon={<HeartHandshake size={15} />} label="Pact" />
+          <SectionButton active={section === "pact"} onClick={() => setSection("pact")} icon={<VelociraptorIcon size={15} />} label="raptrraptr" />
         </div>
       </header>
 
@@ -106,8 +107,8 @@ export default function RaptrApp() {
         </Suspense>
       )}
       {section === "pact" && (
-        <Suspense fallback={<CenterMsg>Loading Pact…</CenterMsg>}>
-          <PactSection currentUser={currentUser} users={USERS} />
+        <Suspense fallback={<CenterMsg>Loading…</CenterMsg>}>
+          <RaptrraptrSection currentUser={currentUser} users={USERS} />
         </Suspense>
       )}
       {section === "social" && (
