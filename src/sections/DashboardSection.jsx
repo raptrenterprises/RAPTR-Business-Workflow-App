@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
-import { CalendarDays, MessageSquare, ClipboardList, Dumbbell, ChevronRight, Megaphone } from "lucide-react";
+import { CalendarDays, MessageSquare, ClipboardList, Dumbbell, ChevronRight, Megaphone, HeartHandshake } from "lucide-react";
 import { STYLES, todayStr, addDays, formatClockTime, effectiveUrgency, comparePriority, importanceColor, urgencyColor, selectStyle, WORKOUT_TYPES } from "../constants";
 import { Badge } from "../components/Shared";
 import { fetchEvents, subscribeEvents } from "../lib/eventsApi";
@@ -7,6 +7,8 @@ import { fetchTasks, subscribeTasks } from "../lib/tasksApi";
 import { fetchThreads, subscribeThreads } from "../lib/threadsApi";
 import { fetchPosts, subscribePosts } from "../lib/postsApi";
 import { fetchChallenges, updateChallenge, subscribeChallenges } from "../lib/gymApi";
+import { fetchPactVotes, subscribePactVotes } from "../lib/pactApi";
+import { isPactDue } from "../lib/pactLogic";
 import { eventCoversDay } from "../constants";
 import { STATUS_LABEL as POST_STATUS_LABEL, STATUS_COLOR as POST_STATUS_COLOR, formatPostDate } from "./social/socialConstants";
 import { normalizeParticipant, targetForDate, weightStatus, STATUS_COLOR } from "../lib/gymHelpers";
@@ -22,6 +24,8 @@ export default function DashboardSection({ currentUser, users, onNavigate, onOpe
   const [tasks, setTasks] = useState([]);
   const [threads, setThreads] = useState([]);
   const [challenges, setChallenges] = useState([]);
+  // null = not loaded (or the pact_votes table isn't there yet), so the Pact card stays hidden rather than guessing.
+  const [pactVotes, setPactVotes] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const reloadPosts = useCallback(async () => { try { setPosts(await fetchPosts()); } catch { /* card just shows empty */ } }, []);
@@ -29,16 +33,18 @@ export default function DashboardSection({ currentUser, users, onNavigate, onOpe
   const reloadTasks = useCallback(async () => { try { setTasks(await fetchTasks()); } catch { /* non-fatal */ } }, []);
   const reloadThreads = useCallback(async () => { try { setThreads(await fetchThreads()); } catch { /* non-fatal */ } }, []);
   const reloadChallenges = useCallback(async () => { try { setChallenges(await fetchChallenges()); } catch { /* non-fatal */ } }, []);
+  const reloadPact = useCallback(async () => { try { setPactVotes(await fetchPactVotes()); } catch { /* card just stays hidden */ } }, []);
 
   useEffect(() => {
-    Promise.all([reloadEvents(), reloadTasks(), reloadThreads(), reloadChallenges(), reloadPosts()]).finally(() => setLoading(false));
+    Promise.all([reloadEvents(), reloadTasks(), reloadThreads(), reloadChallenges(), reloadPosts(), reloadPact()]).finally(() => setLoading(false));
     const u1 = subscribeEvents(reloadEvents);
     const u2 = subscribeTasks(reloadTasks);
     const uPosts = subscribePosts(reloadPosts);
     const u3 = subscribeThreads(reloadThreads);
     const u4 = subscribeChallenges(reloadChallenges);
-    return () => { u1(); u2(); u3(); u4(); uPosts(); };
-  }, [reloadEvents, reloadTasks, reloadThreads, reloadChallenges]);
+    const uPact = subscribePactVotes(reloadPact);
+    return () => { u1(); u2(); u3(); u4(); uPosts(); uPact(); };
+  }, [reloadEvents, reloadTasks, reloadThreads, reloadChallenges, reloadPact]);
 
   const todaysEvents = useMemo(() => events.filter((e) => eventCoversDay(e, todayStr())), [events]);
 
@@ -71,12 +77,16 @@ export default function DashboardSection({ currentUser, users, onNavigate, onOpe
       .sort((a, b) => `${a.publishDate} ${a.publishTime}`.localeCompare(`${b.publishDate} ${b.publishTime}`));
   }, [posts]);
 
+  // Shows once a month (from PACT_OPEN_DAY) and goes away as soon as that month's vote is in.
+  const pactDue = pactVotes !== null && isPactDue(pactVotes);
+
   if (loading) {
     return <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", color: STYLES.slate, fontFamily: "Georgia, serif" }}>Loading dashboard…</div>;
   }
 
   return (
     <main style={{ maxWidth: 720, margin: "0 auto", padding: "28px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+      {pactDue && <PactCard onNavigate={onNavigate} />}
       <CalendarCard events={todaysEvents} onNavigate={onNavigate} />
       <ThreadsCard threads={threadItems} currentUser={currentUser} users={users} onNavigate={onNavigate} />
       <TasksCard tasks={taskItems} onNavigate={onNavigate} />
@@ -86,7 +96,7 @@ export default function DashboardSection({ currentUser, users, onNavigate, onOpe
   );
 }
 
-function CardShell({ icon, title, onNavigate, section, children }) {
+function CardShell({ icon, title, onNavigate, section, actionLabel = "View all", children }) {
   return (
     <div style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 8, padding: 18 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -94,7 +104,7 @@ function CardShell({ icon, title, onNavigate, section, children }) {
           {icon} {title}
         </div>
         <button onClick={() => onNavigate(section)} style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, display: "flex", alignItems: "center", gap: 2, fontSize: 12 }}>
-          View all <ChevronRight size={14} />
+          {actionLabel} <ChevronRight size={14} />
         </button>
       </div>
       {children}
@@ -104,6 +114,16 @@ function CardShell({ icon, title, onNavigate, section, children }) {
 
 function EmptyRow({ children }) {
   return <div style={{ fontSize: 13, color: STYLES.slate, padding: "8px 0" }}>{children}</div>;
+}
+
+function PactCard({ onNavigate }) {
+  return (
+    <CardShell icon={<HeartHandshake size={18} color={STYLES.wax} />} title="Pact" onNavigate={onNavigate} section="pact" actionLabel="Vote">
+      <div onClick={() => onNavigate("pact")} style={{ fontSize: 14, cursor: "pointer", padding: "6px 8px", borderRadius: 4, background: STYLES.brass + "14" }}>
+        This month's vote is open.
+      </div>
+    </CardShell>
+  );
 }
 
 function CalendarCard({ events, onNavigate }) {
