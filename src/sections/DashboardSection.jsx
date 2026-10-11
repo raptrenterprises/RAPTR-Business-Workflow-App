@@ -7,7 +7,7 @@ import { fetchTasks, subscribeTasks } from "../lib/tasksApi";
 import { fetchThreads, subscribeThreads } from "../lib/threadsApi";
 import { fetchPosts, subscribePosts } from "../lib/postsApi";
 import { fetchChallenges, updateChallenge, subscribeChallenges } from "../lib/gymApi";
-import { fetchPactVotes, subscribePactVotes } from "../lib/pactApi";
+import { fetchMyPactVotes, subscribePactVotes } from "../lib/pactApi";
 import { isPactDue } from "../lib/pactLogic";
 import { eventCoversDay } from "../constants";
 import { STATUS_LABEL as POST_STATUS_LABEL, STATUS_COLOR as POST_STATUS_COLOR, formatPostDate } from "./social/socialConstants";
@@ -33,7 +33,7 @@ export default function DashboardSection({ currentUser, users, onNavigate, onOpe
   const reloadTasks = useCallback(async () => { try { setTasks(await fetchTasks()); } catch { /* non-fatal */ } }, []);
   const reloadThreads = useCallback(async () => { try { setThreads(await fetchThreads()); } catch { /* non-fatal */ } }, []);
   const reloadChallenges = useCallback(async () => { try { setChallenges(await fetchChallenges()); } catch { /* non-fatal */ } }, []);
-  const reloadPact = useCallback(async () => { try { setPactVotes(await fetchPactVotes()); } catch { /* card just stays hidden */ } }, []);
+  const reloadPact = useCallback(async () => { try { setPactVotes(await fetchMyPactVotes()); } catch { /* card just stays hidden */ } }, []);
 
   useEffect(() => {
     Promise.all([reloadEvents(), reloadTasks(), reloadThreads(), reloadChallenges(), reloadPosts(), reloadPact()]).finally(() => setLoading(false));
@@ -77,7 +77,7 @@ export default function DashboardSection({ currentUser, users, onNavigate, onOpe
       .sort((a, b) => `${a.publishDate} ${a.publishTime}`.localeCompare(`${b.publishDate} ${b.publishTime}`));
   }, [posts]);
 
-  // Shows once a month (from PACT_OPEN_DAY) and goes away as soon as that month's vote is in.
+  // Shows once a month (from PACT_OPEN_DAY) and goes away for you as soon as your own vote for the month is in.
   const pactDue = pactVotes !== null && isPactDue(pactVotes);
 
   if (loading) {
