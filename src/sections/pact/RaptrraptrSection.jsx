@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { HeartHandshake, Lock } from "lucide-react";
+import { HeartHandshake, Lock, Gift, FileText } from "lucide-react";
 import { STYLES, selectStyle } from "../../constants";
 import { TabButton } from "../../components/Shared";
 import VelociraptorIcon from "../../components/VelociraptorIcon";
 import PactSection from "./PactSection";
+import HolidaysSection from "./HolidaysSection";
+import DocumentsSection from "./DocumentsSection";
 
 // A fixed passcode that keeps the section closed to anyone glancing at the screen. It is checked in the
 // browser, so treat it as a door latch rather than a vault: it does not change who can reach the data.
@@ -52,8 +54,12 @@ export default function RaptrraptrSection({ currentUser, users }) {
     <>
       <div style={{ display: "flex", borderBottom: `1px solid ${STYLES.ink}22`, background: "#fff", overflowX: "auto" }}>
         <TabButton active={tab === "pact"} onClick={() => setTab("pact")} icon={<HeartHandshake size={14} />} label="Pact" />
+        <TabButton active={tab === "holidays"} onClick={() => setTab("holidays")} icon={<Gift size={14} />} label="Holidays" />
+        <TabButton active={tab === "documents"} onClick={() => setTab("documents")} icon={<FileText size={14} />} label="Documents" />
       </div>
       {tab === "pact" && <PactSection currentUser={currentUser} users={users} />}
+      {tab === "holidays" && <HolidaysSection />}
+      {tab === "documents" && <DocumentsSection currentUser={currentUser} />}
     </>
   );
 }
