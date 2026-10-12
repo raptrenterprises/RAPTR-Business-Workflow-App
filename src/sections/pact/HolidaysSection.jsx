@@ -60,6 +60,15 @@ function FieldRow({ label, children }) {
   );
 }
 
+// One text section: read-only text (bullets supported), or a text box while editing.
+function TextBlock({ label, editing, value, onChange, readValue }) {
+  return editing ? (
+    <textarea value={value} onChange={(e) => onChange(e.target.value)} style={textareaStyle} aria-label={label} />
+  ) : (
+    <RichText text={readValue} empty="Nothing added yet. Tap the gear to add details." />
+  );
+}
+
 // One holiday. Read-only until the gear is tapped; then text boxes and the year field appear.
 function HolidayDetail({ holiday, onBack, onSave, saving }) {
   const [editing, setEditing] = useState(false);
@@ -67,15 +76,22 @@ function HolidayDetail({ holiday, onBack, onSave, saving }) {
   const [problem, setProblem] = useState("");
 
   function startEditing() {
-    setDraft({ requiredElements: holiday.requiredElements, anniversaryNotes: holiday.anniversaryNotes, firstYear: holiday.firstYear == null ? "" : String(holiday.firstYear) });
+    setDraft({
+      about: holiday.about, requiredElements: holiday.requiredElements, condensedVersion: holiday.condensedVersion,
+      anniversaryNotes: holiday.anniversaryNotes, firstYear: holiday.firstYear == null ? "" : String(holiday.firstYear),
+    });
     setProblem("");
     setEditing(true);
   }
   function cancel() { setEditing(false); setDraft(null); setProblem(""); }
+  const setField = (key) => (value) => setDraft((d) => ({ ...d, [key]: value }));
 
   async function save() {
     if (!validYearInput(draft.firstYear)) { setProblem(`The year must be a whole number from ${FIRST_YEAR_MIN} to ${FIRST_YEAR_MAX}, or left empty.`); return; }
-    const ok = await onSave(holiday.id, { requiredElements: draft.requiredElements, anniversaryNotes: draft.anniversaryNotes, firstYear: draft.firstYear === "" ? null : Number(draft.firstYear) });
+    const ok = await onSave(holiday.id, {
+      about: draft.about, requiredElements: draft.requiredElements, condensedVersion: draft.condensedVersion,
+      anniversaryNotes: draft.anniversaryNotes, firstYear: draft.firstYear === "" ? null : Number(draft.firstYear),
+    });
     if (ok) cancel();
   }
 
@@ -96,27 +112,26 @@ function HolidayDetail({ holiday, onBack, onSave, saving }) {
           <Settings size={20} />
         </button>
       </div>
+      {editing && (
+        <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 6 }}>
+          In any box, start a line with - for a bullet and indent two spaces for a sub-bullet. Anything else is plain text.
+        </div>
+      )}
 
-      <SectionCard title="Required Elements">
-        {editing ? (
-          <>
-            <textarea value={draft.requiredElements} onChange={(e) => setDraft((d) => ({ ...d, requiredElements: e.target.value }))} style={textareaStyle} aria-label="Required Elements" />
-            <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 4 }}>Start a line with - for a bullet. Indent two spaces for a sub-bullet. Anything else is plain text.</div>
-          </>
-        ) : (
-          <RichText text={holiday.requiredElements} empty="Nothing added yet. Tap the gear to add details." />
-        )}
+      <SectionCard title="About">
+        <TextBlock label="About" editing={editing} value={draft?.about} onChange={setField("about")} readValue={holiday.about} />
       </SectionCard>
 
-      <SectionCard title="10 yr Anniversary">
-        {editing ? (
-          <>
-            <textarea value={draft.anniversaryNotes} onChange={(e) => setDraft((d) => ({ ...d, anniversaryNotes: e.target.value }))} style={textareaStyle} aria-label="10 yr Anniversary" />
-            <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 4 }}>Start a line with - for a bullet. Indent two spaces for a sub-bullet. Anything else is plain text.</div>
-          </>
-        ) : (
-          <RichText text={holiday.anniversaryNotes} empty="Nothing added yet. Tap the gear to add details." />
-        )}
+      <SectionCard title="Basic Requirements">
+        <TextBlock label="Basic Requirements" editing={editing} value={draft?.requiredElements} onChange={setField("requiredElements")} readValue={holiday.requiredElements} />
+      </SectionCard>
+
+      <SectionCard title="Condensed Version">
+        <TextBlock label="Condensed Version" editing={editing} value={draft?.condensedVersion} onChange={setField("condensedVersion")} readValue={holiday.condensedVersion} />
+      </SectionCard>
+
+      <SectionCard title="10 Yr Anniversary">
+        <TextBlock label="10 Yr Anniversary" editing={editing} value={draft?.anniversaryNotes} onChange={setField("anniversaryNotes")} readValue={holiday.anniversaryNotes} />
 
         <FieldRow label="Year of First Celebration">
           {editing ? (

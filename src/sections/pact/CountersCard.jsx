@@ -5,7 +5,7 @@ import {
   fetchCounterCategories, fetchCounterDaily, addCounterEvent,
   addCounterCategory, renameCounterCategory, removeCounterCategory, subscribeCounters,
 } from "../../lib/pactApi";
-import { COUNTER_GROUPS, AMOUNTS, personTotals } from "../../lib/counterLogic";
+import { COUNTER_GROUPS, COUNT_KINDS, personTotals } from "../../lib/counterLogic";
 
 const CounterChart = lazy(() => import("./CounterChart"));
 
@@ -18,19 +18,29 @@ const smallBtn = (disabled, solid = true) => ({
 const fmt = (n) => (n < 0 ? `−${Math.abs(n)}` : String(n));
 const groupColor = (kind) => (kind === "positive" ? "#2E8B57" : "#C62828");
 
-// +1 (minor) and +5 (major). Only shown on your own side.
-function PersonCell({ name, count, mine, busy, onAdd }) {
+// One micro line or one macro line: its count, and a +1 button on your own side only.
+function CountLine({ kind, label, count, mine, busy, onAdd }) {
   return (
-    <div style={{ flex: 1, border: `1px solid ${STYLES.ink}1f`, borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
-      <div style={{ fontSize: 12, color: STYLES.slate }}>{name}</div>
-      <div style={{ fontFamily: "Georgia, serif", fontSize: 26, fontWeight: 700, lineHeight: 1.15 }}>{count}</div>
-      {mine && (
-        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6 }}>
-          {AMOUNTS.map((a) => (
-            <button key={a.amount} disabled={busy} onClick={() => onAdd(a.amount)} aria-label={a.amount === 1 ? "Add one (minor)" : "Add five (major)"} style={smallBtn(busy)}>{a.label}</button>
-          ))}
-        </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
+      <span style={{ fontSize: 12, color: STYLES.slate, minWidth: 38, textAlign: "left" }}>{label}</span>
+      <span style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, lineHeight: 1.15, flex: 1, textAlign: "center" }}>{count}</span>
+      {mine ? (
+        <button disabled={busy} onClick={() => onAdd(kind)} aria-label={`Add one ${kind}`} style={smallBtn(busy)}>+1</button>
+      ) : (
+        <span style={{ width: 44 }} />
       )}
+    </div>
+  );
+}
+
+// One person's micro and macro counts for a category.
+function PersonCell({ name, counts, mine, busy, onAdd }) {
+  return (
+    <div style={{ flex: 1, border: `1px solid ${STYLES.ink}1f`, borderRadius: 6, padding: "8px 10px" }}>
+      <div style={{ fontSize: 12, color: STYLES.slate, textAlign: "center" }}>{name}</div>
+      {COUNT_KINDS.map((k) => (
+        <CountLine key={k.kind} kind={k.kind} label={k.label} count={counts[k.kind]} mine={mine} busy={busy} onAdd={onAdd} />
+      ))}
     </div>
   );
 }
@@ -39,10 +49,12 @@ function GroupBlock({ group, categories, users, totals, currentUser, busy, onAdd
   const cats = categories.filter((c) => c.kind === group.kind);
   return (
     <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 6, borderBottom: `2px solid ${groupColor(group.kind)}`, paddingBottom: 4, marginBottom: 10 }}>
+      <div style={{ borderBottom: `2px solid ${groupColor(group.kind)}`, paddingBottom: 4, marginBottom: 10 }}>
         <div style={{ fontWeight: 700, color: groupColor(group.kind) }}>{group.label}</div>
-        <div style={{ fontSize: 13, color: STYLES.slate }}>
-          {users.map((u) => `${u} ${totals[u][group.kind]}`).join("  ·  ")}
+        <div style={{ display: "flex", flexWrap: "wrap", columnGap: 16, rowGap: 2, fontSize: 13, color: STYLES.slate, marginTop: 2 }}>
+          {users.map((u) => (
+            <span key={u}>{u}: {totals[u][group.kind].micro} micro, {totals[u][group.kind].macro} macro</span>
+          ))}
         </div>
       </div>
       {cats.length === 0 && <div style={{ fontSize: 13, color: STYLES.slate }}>No categories yet. Add one with the gear.</div>}
@@ -52,9 +64,26 @@ function GroupBlock({ group, categories, users, totals, currentUser, busy, onAdd
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{c.name}</div>
             <div style={{ display: "flex", gap: 8 }}>
               {users.map((u) => (
-                <PersonCell key={u} name={u} count={totals[u].byCat[c.id] ?? 0} mine={u === currentUser} busy={busy} onAdd={(amount) => onAdd(c.id, amount)} />
+                <PersonCell key={u} name={u} counts={totals[u].byCat[c.id] || { micro: 0, macro: 0 }} mine={u === currentUser} busy={busy} onAdd={(kind) => onAdd(c.id, kind)} />
               ))}
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Each person's overall total: micro and macro, each positive minus negative.
+function OverallTile({ name, overall }) {
+  return (
+    <div style={{ flex: 1, background: STYLES.brass + "14", borderRadius: 6, padding: "10px 12px", textAlign: "center" }}>
+      <div style={{ fontSize: 12, color: STYLES.slate }}>{name} overall</div>
+      <div style={{ display: "flex", justifyContent: "space-around", marginTop: 2 }}>
+        {COUNT_KINDS.map((k) => (
+          <div key={k.kind}>
+            <div style={{ fontFamily: "Georgia, serif", fontSize: 28, fontWeight: 700, color: STYLES.wax, lineHeight: 1.15 }}>{fmt(overall[k.kind])}</div>
+            <div style={{ fontSize: 11, color: STYLES.slate }}>{k.label}</div>
           </div>
         ))}
       </div>
@@ -157,7 +186,7 @@ export default function CountersCard({ currentUser, users }) {
     catch (e) { setError(failMsg + e.message); }
     finally { setBusy(false); }
   }
-  const addCount = (categoryId, amount) => run(() => addCounterEvent(categoryId, currentUser, amount), "Couldn't add to the counter: ");
+  const addCount = (categoryId, kind) => run(() => addCounterEvent(categoryId, currentUser, kind), "Couldn't add to the counter: ");
   const addCategory = (kind, name) => run(() => addCounterCategory(kind, name), "Couldn't add the category: ");
   const rename = (id, name) => run(() => renameCounterCategory(id, name), "Couldn't rename the category: ");
   function remove(category) {
@@ -168,7 +197,7 @@ export default function CountersCard({ currentUser, users }) {
   return (
     <div style={cardStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700 }}>Microaggression Counters</div>
+        <div style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700 }}>Micro &amp; Macroaggression Counters</div>
         <button onClick={() => setSettingsOpen((o) => !o)} aria-label="Counter settings" title="Counter settings" style={{ background: "none", border: "none", cursor: "pointer", color: STYLES.slate, display: "flex", padding: 4 }}>
           <Settings size={18} />
         </button>
@@ -185,14 +214,9 @@ export default function CountersCard({ currentUser, users }) {
       ) : (
         <>
           <div style={{ display: "flex", gap: 8 }}>
-            {users.map((u) => (
-              <div key={u} style={{ flex: 1, background: STYLES.brass + "14", borderRadius: 6, padding: "10px 12px", textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: STYLES.slate }}>{u} overall</div>
-                <div style={{ fontFamily: "Georgia, serif", fontSize: 30, fontWeight: 700, color: STYLES.wax, lineHeight: 1.15 }}>{fmt(totals[u].overall)}</div>
-              </div>
-            ))}
+            {users.map((u) => <OverallTile key={u} name={u} overall={totals[u].overall} />)}
           </div>
-          <div style={{ fontSize: 11, color: STYLES.slate, textAlign: "center", marginTop: 4 }}>Overall = positive minus negative</div>
+          <div style={{ fontSize: 11, color: STYLES.slate, textAlign: "center", marginTop: 4 }}>Overall = positive minus negative, for micro and macro separately</div>
 
           {COUNTER_GROUPS.map((g) => (
             <GroupBlock key={g.kind} group={g} categories={categories} users={users} totals={totals} currentUser={currentUser} busy={busy} onAdd={addCount} />

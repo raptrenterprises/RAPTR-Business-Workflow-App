@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { STYLES, todayStr } from "../../constants";
-import { buildSeries, OVERALL_KEY, GROUP_KEY } from "../../lib/counterLogic";
+import { buildSeries, COUNT_KINDS, OVERALL_KEY, GROUP_KEY } from "../../lib/counterLogic";
 
 const PALETTE = ["#3B6E8F", "#6B4E8E", "#B8860B", "#C1562E", "#4E8E8E", "#8E4E6B", "#7A7A2E", "#5A5A5A"];
 
@@ -24,11 +24,12 @@ const shortDate = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
 // Lazy-loaded (like the other charts) so recharts is only fetched when someone opens it.
 export default function CounterChart({ categories, daily, users, currentUser }) {
   const [person, setPerson] = useState(currentUser);
+  const [kind, setKind] = useState("micro");
   const [hidden, setHidden] = useState({});
   const { series, data } = useMemo(() => {
-    const built = buildSeries(categories, daily, person, todayStr());
+    const built = buildSeries(categories, daily, person, kind, todayStr());
     return { series: styleFor(built.series), data: built.data };
-  }, [categories, daily, person]);
+  }, [categories, daily, person, kind]);
 
   if (data.length === 0) {
     return <div style={{ fontSize: 13, color: STYLES.slate, padding: "12px 0" }}>Nothing to chart yet. It fills in as you add counts.</div>;
@@ -36,9 +37,13 @@ export default function CounterChart({ categories, daily, users, currentUser }) 
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
         {users.map((u) => (
           <button key={u} onClick={() => setPerson(u)} style={{ padding: "6px 14px", borderRadius: 14, cursor: "pointer", fontSize: 13, border: `1px solid ${person === u ? STYLES.wax : STYLES.ink + "33"}`, background: person === u ? STYLES.wax : "#fff", color: person === u ? "#fff" : STYLES.ink }}>{u}</button>
+        ))}
+        <span style={{ width: 1, alignSelf: "stretch", background: STYLES.ink + "22", margin: "0 4px" }} />
+        {COUNT_KINDS.map((k) => (
+          <button key={k.kind} onClick={() => setKind(k.kind)} style={{ padding: "6px 14px", borderRadius: 14, cursor: "pointer", fontSize: 13, border: `1px solid ${kind === k.kind ? STYLES.slate : STYLES.ink + "33"}`, background: kind === k.kind ? STYLES.slate : "#fff", color: kind === k.kind ? "#fff" : STYLES.ink }}>{k.label}</button>
         ))}
       </div>
       <ResponsiveContainer width="100%" height={280}>

@@ -8,7 +8,9 @@ function holidayFromRow(r) {
   return {
     id: r.id,
     name: r.name,
+    about: r.about || "",
     requiredElements: r.required_elements || "",
+    condensedVersion: r.condensed_version || "",
     anniversaryNotes: r.anniversary_notes || "",
     firstYear: r.first_year,
   };
@@ -20,9 +22,11 @@ export async function fetchHolidays() {
   return data.map(holidayFromRow);
 }
 
-export async function saveHoliday(id, { requiredElements, anniversaryNotes, firstYear }) {
+export async function saveHoliday(id, { about, requiredElements, condensedVersion, anniversaryNotes, firstYear }) {
   const { error } = await supabase.from("rr_holidays").update({
+    about,
     required_elements: requiredElements,
+    condensed_version: condensedVersion,
     anniversary_notes: anniversaryNotes,
     first_year: firstYear,
     updated_at: new Date().toISOString(),

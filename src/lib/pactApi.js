@@ -75,25 +75,26 @@ export async function removeCounterCategory(id) {
   if (error) throw error;
 }
 
-// Per day, category and person: how much was added. The API returns at most 1000 rows per request, so page through.
+// Per day, category, person and kind (micro or macro): how many were added. The API returns at most 1000 rows
+// per request, so page through.
 export async function fetchCounterDaily() {
   const PAGE = 1000;
   const out = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
-      .from("pact_counter_daily").select("day, category_id, person, total")
-      .order("day", { ascending: true }).order("category_id", { ascending: true }).order("person", { ascending: true })
+      .from("pact_counter_daily").select("day, category_id, person, kind, total")
+      .order("day", { ascending: true }).order("category_id", { ascending: true }).order("person", { ascending: true }).order("kind", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
-    data.forEach((r) => out.push({ day: r.day, categoryId: r.category_id, person: r.person, total: r.total }));
+    data.forEach((r) => out.push({ day: r.day, categoryId: r.category_id, person: r.person, kind: r.kind, total: r.total }));
     if (data.length < PAGE) break;
   }
   return out;
 }
 
-// amount is 1 (minor) or 5 (major). You can only add to your own counter.
-export async function addCounterEvent(categoryId, person, amount) {
-  const { error } = await supabase.rpc("pact_counter_add", { p_category: categoryId, p_person: person, p_amount: amount });
+// Adds one micro or macro count. You can only add to your own counter.
+export async function addCounterEvent(categoryId, person, kind) {
+  const { error } = await supabase.rpc("pact_counter_add", { p_category: categoryId, p_person: person, p_kind: kind });
   if (error) throw error;
 }
 
