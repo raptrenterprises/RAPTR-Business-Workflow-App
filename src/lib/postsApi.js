@@ -121,7 +121,7 @@ function keywordFromRow(r) {
 }
 
 function unitFromRow(r) {
-  return { id: r.id, postId: r.post_id, sortOrder: r.sort_order || 0, textOverlay: r.text_overlay || "", script: r.script || "", editingNotes: r.editing_notes || "", finalUrl: r.final_url || "", finalMediaId: r.final_media_id || "" };
+  return { id: r.id, postId: r.post_id, sortOrder: r.sort_order || 0, overview: r.overview || "", textOverlay: r.text_overlay || "", script: r.script || "", editingNotes: r.editing_notes || "", finalUrl: r.final_url || "", finalMediaId: r.final_media_id || "" };
 }
 
 function shotFromRow(r) {
@@ -200,7 +200,7 @@ export async function savePost(post, units, shots, removed, isNew, originalLinks
     if (error) throw error;
   }
   if (units.length > 0) {
-    const rows = units.map((u, i) => ({ id: u.id, post_id: post.id, sort_order: i, text_overlay: u.textOverlay || null, script: u.script || null, editing_notes: u.editingNotes || null, final_url: u.finalUrl || null, final_media_id: u.finalMediaId || null }));
+    const rows = units.map((u, i) => ({ id: u.id, post_id: post.id, sort_order: i, overview: u.overview || null, text_overlay: u.textOverlay || null, script: u.script || null, editing_notes: u.editingNotes || null, final_url: u.finalUrl || null, final_media_id: u.finalMediaId || null }));
     const { error } = await supabase.from("post_units").upsert(rows);
     if (error) throw error;
   }

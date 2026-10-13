@@ -149,7 +149,7 @@ function ShotGroup({ label, shots, multi, mediaById, onPatch, onRemove, onAdd, o
   );
 }
 
-function UnitCard({ index, count, noun, kind, unit, open, summary, media, onToggle, onPatch, onMove, onRemove, children }) {
+function UnitCard({ index, count, noun, kind, unit, open, summary, media, locations, onToggle, onPatch, onMove, onRemove, children }) {
   return (
     <div style={{ background: STYLES.parchment, border: `1px solid ${STYLES.ink}33`, borderLeft: `4px solid ${STYLES.purple}`, borderRadius: 6, padding: 12, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: open ? 10 : 0 }}>
@@ -170,8 +170,10 @@ function UnitCard({ index, count, noun, kind, unit, open, summary, media, onTogg
         </>
       ) : (
         <>
-          <Field label="Script"><textarea value={unit.script} onChange={(e) => onPatch(unit.id, { script: e.target.value })} rows={3} style={textareaStyle} placeholder="What's said or narrated in this beat" /></Field>
-          <Field label="Editing notes / text overlays"><textarea value={unit.editingNotes} onChange={(e) => onPatch(unit.id, { editingNotes: e.target.value })} rows={3} style={textareaStyle} placeholder="Cuts, transitions, music, on-screen text" /></Field>
+          <Field label="Overview"><textarea value={unit.overview} onChange={(e) => onPatch(unit.id, { overview: e.target.value })} rows={2} style={textareaStyle} placeholder="What happens in this beat, in plain terms" /></Field>
+          <Field label="Spoken script"><textarea value={unit.script} onChange={(e) => onPatch(unit.id, { script: e.target.value })} rows={3} style={textareaStyle} placeholder="Only words that will be said aloud" /></Field>
+          <Field label="Text overlay"><textarea value={unit.textOverlay} onChange={(e) => onPatch(unit.id, { textOverlay: e.target.value })} rows={2} style={textareaStyle} placeholder="Only words that will appear on screen" /></Field>
+          <Field label="Production / editing notes"><textarea value={unit.editingNotes} onChange={(e) => onPatch(unit.id, { editingNotes: e.target.value })} rows={3} style={textareaStyle} placeholder="Cuts, transitions, music, camera and setup notes" /></Field>
           {children}
         </>
       ))}
@@ -440,7 +442,7 @@ function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
   );
 }
 
-const blankUnit = () => ({ id: uid(), textOverlay: "", script: "", editingNotes: "", finalUrl: "", finalMediaId: "" });
+const blankUnit = () => ({ id: uid(), overview: "", textOverlay: "", script: "", editingNotes: "", finalUrl: "", finalMediaId: "" });
 const blankShot = (postId, unitId, postType) => ({ id: uid(), postId, unitId: unitId || null, description: "", mediaType: "", aspectRatio: defaultAspectRatio(postType), people: [], tags: [], completed: false, mediaIds: [] });
 const blankPost = (campaignId) => ({
   id: uid(), title: "", postType: "Reel", status: "idea", publishDate: "", publishTime: "", description: "", caption: "", seederComments: "",
@@ -468,7 +470,7 @@ function ensureStructure(postType, units, shots, postId) {
 }
 
 const unitHasContent = (unit, shotList) =>
-  [unit.textOverlay, unit.script, unit.editingNotes, unit.finalUrl, unit.finalMediaId].some((v) => v && v.trim()) || shotList.some((s) => s.unitId === unit.id && s.description.trim());
+  [unit.overview, unit.textOverlay, unit.script, unit.editingNotes, unit.finalUrl, unit.finalMediaId].some((v) => v && v.trim()) || shotList.some((s) => s.unitId === unit.id && s.description.trim());
 const badUrl = (v) => v.trim() && !/^https?:\/\//i.test(v.trim());
 
 export default function PostForm({ post, defaults, notice, shots, units: savedUnits, keywords: savedKeywords, locations, shotMedia, media, campaigns, currentUser, onSave, onDelete, onClose }) {
@@ -660,11 +662,11 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
             )}
             {units.map((unit, i) => {
               const unitShots = shotList.filter((s) => s.unitId === unit.id);
-              const text = (unit.textOverlay || unit.script || unit.editingNotes || "").replace(/\s+/g, " ").trim();
+              const text = (unit.overview || unit.textOverlay || unit.script || unit.editingNotes || "").replace(/\s+/g, " ").trim();
               const named = unitShots.filter((s) => s.description.trim());
               const summary = [text ? text.slice(0, 60) : "", named.length > 0 ? `${named.filter((s) => s.completed).length}/${named.length} shots` : ""].filter(Boolean).join(" · ");
               return (
-                <UnitCard key={unit.id} index={i} count={units.length} noun={unitNoun} kind={cfg.units} unit={unit} open={expanded[unit.id] ?? true} summary={summary} media={media}
+                <UnitCard key={unit.id} index={i} count={units.length} noun={unitNoun} kind={cfg.units} unit={unit} open={expanded[unit.id] ?? true} summary={summary} media={media} locations={locations}
                   onToggle={(id) => setExpanded((m) => ({ ...m, [id]: !(m[id] ?? true) }))} onPatch={patchUnit} onMove={moveUnit} onRemove={removeUnit}>
                   <ShotGroup label="Shot list items" shots={unitShots} multi mediaById={mediaById} onPatch={patchShot} onRemove={dropShotFromList} onAdd={() => addShot(unit.id)} onFind={setPickerShotId} />
                 </UnitCard>
