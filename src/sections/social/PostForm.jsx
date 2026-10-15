@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef } from "react";
-import { X, Plus, Trash2, ChevronRight, ChevronUp, ChevronDown, Search, ExternalLink } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { X, Plus, Trash2, ChevronRight, ChevronUp, ChevronDown, Search, ExternalLink, Copy } from "lucide-react";
 import { STYLES, uid, selectStyle } from "../../constants";
 import MediaPicker from "./MediaPicker";
+import MarkdownView from "../../components/MarkdownView";
+import { markdownToHtml, markdownToPlain, splitTitle, wordCount } from "../../lib/markdown";
+import { copyRich, copyPlain } from "../../lib/clipboard";
 import { resolveMediaUrl } from "../../lib/mediaLinks";
 import { ASPECT_RATIOS, defaultAspectRatio } from "../../lib/aspectRatio";
 import {
@@ -442,6 +445,51 @@ function MetricsSection({ draft, set, keywords, onKeywordsChange }) {
   );
 }
 
+// Blog post text. Stored as Markdown (# title, ## headings, [links](https://…)) so headings and links survive.
+// "Copy title" and "Copy for Squarespace" put the title and the formatted body on the clipboard, ready to paste
+// into Squarespace's title box and body editor. Defined here at module level on purpose (see the remount rule).
+function BlogTextField({ title, value, onChange }) {
+  const [mode, setMode] = useState(value && value.trim() ? "preview" : "edit");
+  const [note, setNote] = useState("");
+  const { title: h1, body } = useMemo(() => splitTitle(value), [value]);
+  const flash = (msg) => { setNote(msg); setTimeout(() => setNote(""), 2500); };
+
+  async function copyTitleOnly() {
+    const t = (h1 || title || "").trim();
+    if (!t) { flash("There's no title to copy yet."); return; }
+    flash((await copyPlain(t)) ? "Title copied" : "Couldn't copy. Select it and copy by hand.");
+  }
+  async function copyBody() {
+    if (!body) { flash("There's no blog text to copy yet."); return; }
+    flash((await copyRich(markdownToHtml(body, { external: false }), markdownToPlain(body))) ? "Blog text copied. Paste it into the Squarespace post." : "Couldn't copy. Switch to Edit, select the text and copy by hand.");
+  }
+
+  const tabStyle = (active) => ({ padding: "5px 12px", fontSize: 12, border: "none", cursor: "pointer", background: active ? STYLES.brass : "#fff", color: active ? STYLES.ink : STYLES.slate, fontWeight: active ? 700 : 400 });
+  const copyBtn = { background: STYLES.wax, color: "#fff", border: "none", borderRadius: 4, padding: "6px 11px", cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 };
+  const words = wordCount(body);
+
+  return (
+    <Field label="Blog post text" hint={`${words} words. Headings and links are kept. The title is copied separately from the body, so it isn't repeated in the body.`}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+        <div style={{ display: "flex", border: `1px solid ${STYLES.ink}33`, borderRadius: 4, overflow: "hidden" }}>
+          <button type="button" onClick={() => setMode("preview")} style={tabStyle(mode === "preview")}>Preview</button>
+          <button type="button" onClick={() => setMode("edit")} style={tabStyle(mode === "edit")}>Edit</button>
+        </div>
+        <button type="button" onClick={copyTitleOnly} style={copyBtn}><Copy size={12} /> Copy title</button>
+        <button type="button" onClick={copyBody} style={copyBtn}><Copy size={12} /> Copy for Squarespace</button>
+        {note && <span style={{ fontSize: 12, color: STYLES.slate }}>{note}</span>}
+      </div>
+      {mode === "preview" ? (
+        <div style={{ background: "#fff", border: `1px solid ${STYLES.ink}22`, borderRadius: 6, padding: "14px 16px", maxHeight: 460, overflowY: "auto" }}>
+          {value && value.trim() ? <MarkdownView text={value} /> : <div style={{ fontSize: 13, color: STYLES.slate }}>No blog text yet. Ask Claude to add it, or switch to Edit and paste it in.</div>}
+        </div>
+      ) : (
+        <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={14} placeholder={"# Post title\n\nFirst paragraph…\n\n## A heading\n\nText with a [link](https://www.raptrmysteries.com)."} style={{ ...textareaStyle, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13 }} />
+      )}
+    </Field>
+  );
+}
+
 const blankUnit = () => ({ id: uid(), overview: "", textOverlay: "", script: "", editingNotes: "", finalUrl: "", finalMediaId: "" });
 const blankShot = (postId, unitId, postType) => ({ id: uid(), postId, unitId: unitId || null, description: "", mediaType: "", aspectRatio: defaultAspectRatio(postType), people: [], tags: [], completed: false, mediaIds: [] });
 const blankPost = (campaignId) => ({
@@ -686,12 +734,10 @@ export default function PostForm({ post, defaults, notice, shots, units: savedUn
           <Section title={cfg.blog ? "Blog post" : cfg.pin ? "Pin" : "Content"}>
             {cfg.blog && (
               <>
-                <LinkField label="Blog post document (link)" value={draft.blogDocUrl} onChange={(v) => set({ blogDocUrl: v })} placeholder="Paste the OneDrive link to the blog post file" />
+                <BlogTextField title={draft.title} value={draft.blogText} onChange={(v) => set({ blogText: v })} />
+                <LinkField label="Blog post document (link, optional)" value={draft.blogDocUrl} onChange={(v) => set({ blogDocUrl: v })} placeholder="Only needed for older posts kept in OneDrive" />
                 <LinkField label="Published blog post address (live link)" value={draft.liveUrl} onChange={(v) => set({ liveUrl: v })} placeholder="https://www.raptrmysteries.com/blog/…" />
                 <div style={{ fontSize: 11.5, color: STYLES.slate, margin: "-8px 0 12px" }}>Once this is filled in, its Google Search Console keywords fill in automatically (see Performance Metrics below).</div>
-                {draft.blogText && (
-                  <Field label="Earlier typed text (plain text only; headings and links aren't kept)"><textarea value={draft.blogText} onChange={(e) => set({ blogText: e.target.value })} rows={6} style={textareaStyle} /></Field>
-                )}
                 <Field label="SEO title" hint={`${draft.seoTitle.length} characters. Search results usually show about ${SEO_TITLE_TARGET}.`}><input value={draft.seoTitle} onChange={(e) => set({ seoTitle: e.target.value })} style={inputStyle} /></Field>
                 <Field label="SEO description" hint={`${draft.seoDescription.length} characters. Search results usually show about ${SEO_DESCRIPTION_TARGET}.`}><textarea value={draft.seoDescription} onChange={(e) => set({ seoDescription: e.target.value })} rows={3} style={textareaStyle} /></Field>
                 <Field label="Squarespace categories"><MultiSelectDropdown markOld options={SQS_CATEGORIES} selected={draft.sqsCategories} placeholder="Choose categories…" onChange={(sqsCategories) => set({ sqsCategories })} /></Field>

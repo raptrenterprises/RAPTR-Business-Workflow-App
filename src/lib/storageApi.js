@@ -34,6 +34,13 @@ export async function deleteAttachment(path) {
   if (error) throw error;
 }
 
+// The text of an attached text file (used to read .md attachments in the app).
+export async function downloadAttachmentText(path) {
+  const { data, error } = await supabase.storage.from(BUCKET).download(path);
+  if (error) throw error;
+  return await data.text();
+}
+
 export function formatFileSize(bytes) {
   if (bytes == null) return "";
   if (bytes < 1024) return `${bytes} B`;

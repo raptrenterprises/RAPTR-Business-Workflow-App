@@ -49,7 +49,7 @@ function UploadPanel({ uploading, onUpload, onCancel }) {
         <button onClick={() => inputRef.current && inputRef.current.click()} disabled={uploading} style={ghostBtn}><FileText size={14} /> {file ? "Change file" : "Choose file"}</button>
         {file && <span style={{ fontSize: 13 }}>{file.name} <span style={{ color: STYLES.slate }}>({formatFileSize(file.size)})</span></span>}
       </div>
-      <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 8 }}>PDF, Word (.docx) or image, up to 25 MB.</div>
+      <div style={{ fontSize: 12, color: STYLES.slate, marginTop: 8 }}>PDF, Word (.docx), Markdown (.md) or image, up to 25 MB.</div>
       {problem && <div style={{ marginTop: 10, fontSize: 13, color: STYLES.wax, fontWeight: 600 }}>{problem}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
         <button onClick={submit} disabled={uploading} style={primaryBtn(uploading)}><Upload size={14} /> {uploading ? "Uploading…" : "Upload"}</button>

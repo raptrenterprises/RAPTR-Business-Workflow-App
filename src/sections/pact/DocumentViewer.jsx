@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { STYLES } from "../../constants";
 import { downloadDocumentBlob } from "../../lib/rrApi";
 import { documentType } from "../../lib/rrLogic";
+import MarkdownView from "../../components/MarkdownView";
 
 // Lazy-loaded from the Documents screen, so the PDF and Word libraries only download when you open a document.
 // Files are fetched through your sign-in (the bucket is private) and drawn right here. Nothing is sent to a third party.
@@ -120,6 +121,24 @@ function DocxView({ blob }) {
   );
 }
 
+// Markdown (.md): shown as a readable page instead of raw text full of # and * symbols.
+function MarkdownDocView({ blob }) {
+  const [state, setState] = useState({ status: "loading", text: "", message: "" });
+  useEffect(() => {
+    let cancelled = false;
+    blob.text()
+      .then((text) => { if (!cancelled) setState({ status: "ready", text, message: "" }); })
+      .catch((e) => { if (!cancelled) setState({ status: "error", text: "", message: e.message || "unknown error" }); });
+    return () => { cancelled = true; };
+  }, [blob]);
+  return (
+    <div style={frame}>
+      <Status state={state} />
+      {state.status === "ready" && <div style={{ background: "#fff", borderRadius: 4, padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,.25)" }}><MarkdownView text={state.text} /></div>}
+    </div>
+  );
+}
+
 function ImageView({ blob }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
@@ -152,5 +171,6 @@ export default function DocumentViewer({ doc }) {
   if (kind === "pdf") return <PdfView blob={state.blob} />;
   if (kind === "docx") return <DocxView blob={state.blob} />;
   if (kind === "image") return <ImageView blob={state.blob} />;
+  if (kind === "markdown") return <MarkdownDocView blob={state.blob} />;
   return <div style={frame}><div style={{ fontSize: 13, padding: 12 }}>This file type can't be shown here. Use Download.</div></div>;
 }

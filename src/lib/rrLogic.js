@@ -60,10 +60,12 @@ export function parseRichText(text) {
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 
-// What the app can show. Word is .docx only (the old .doc format can't be shown); PDFs and images also work.
+// What the app can show. Word is .docx only (the old .doc format can't be shown); PDFs, images and Markdown (.md) also work.
 export const DOCUMENT_TYPES = {
   pdf: { kind: "pdf", label: "PDF", mime: "application/pdf" },
   docx: { kind: "docx", label: "Word", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+  md: { kind: "markdown", label: "Markdown", mime: "text/markdown" },
+  markdown: { kind: "markdown", label: "Markdown", mime: "text/markdown" },
   png: { kind: "image", label: "Image", mime: "image/png" },
   jpg: { kind: "image", label: "Image", mime: "image/jpeg" },
   jpeg: { kind: "image", label: "Image", mime: "image/jpeg" },
@@ -86,7 +88,7 @@ export function documentType(fileName) {
 export function validateUpload(file) {
   if (!file) return "Choose a file first.";
   if (fileExtension(file.name) === "doc") return "Old .doc files can't be shown in the app. Save it as .docx or PDF and upload that.";
-  if (!documentType(file.name)) return "Upload a PDF, Word (.docx) or image file.";
+  if (!documentType(file.name)) return "Upload a PDF, Word (.docx), Markdown (.md) or image file.";
   if (file.size > MAX_DOCUMENT_BYTES) return `"${file.name}" is too large (max 25MB).`;
   return "";
 }
