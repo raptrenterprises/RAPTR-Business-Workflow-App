@@ -30,8 +30,8 @@ Keep these out of chat, email, and the app's code. They're only meant to live in
 
 ## 4. Deploy and sync
 1. Upload the new files to GitHub as usual. Vercel redeploys. (New environment variables only take effect on a new deployment.)
-2. In the app, go to **Marketing > Search** and press **Sync now**. The first sync pulls the last 90 days. After that it refreshes itself every morning (about 7 am Eastern).
-3. For each blog post, paste its published address into **Published blog post address**. Its keywords then fill in automatically.
+2. In the app, go to **Marketing > Performance** and press **Sync now**. The first sync pulls the last 90 days. After that it refreshes itself every morning (about 7 am Eastern).
+3. Blog posts connect to their pages by themselves: each sync matches a new page to the blog post with the same title and saves its address. If one doesn't match (for example you changed the web address in Squarespace), open **Performance > Pages**, find the page, and choose its blog post from the "Link to a blog post" list. Its keywords then fill in automatically.
 
 ## If the sync shows an error
-The message on the Search tab says what's wrong, for example a missing variable, or "Search Console refused access" (the service account email wasn't added as a user, or `GSC_SITE_URL` doesn't match the property name).
+The message on the Performance tab says what's wrong, for example a missing variable, or "Search Console refused access" (the service account email wasn't added as a user, or `GSC_SITE_URL` doesn't match the property name).

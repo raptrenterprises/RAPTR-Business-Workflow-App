@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Images, CalendarRange, CalendarDays, Layers, ListChecks, Search } from "lucide-react";
+import { Images, CalendarRange, CalendarDays, Layers, ListChecks, TrendingUp } from "lucide-react";
 import { STYLES, uid, todayStr } from "../../constants";
 import { TabButton, CenterMsg, ErrorBar } from "../../components/Shared";
 import { savePost, setPostStatus, setPostCampaign, deletePostRow, setPostDate, setShotCompleted, setShotMediaLinks, insertCampaign, updateCampaign, deleteCampaignRow } from "../../lib/postsApi";
@@ -20,7 +20,7 @@ const SUBTABS = [
   { key: "shots", label: "Shot List", icon: <ListChecks size={14} /> },
   { key: "campaigns", label: "Campaigns", icon: <Layers size={14} /> },
   { key: "library", label: "Media Library", icon: <Images size={14} /> },
-  { key: "search", label: "Search", icon: <Search size={14} /> },
+  { key: "performance", label: "Performance", icon: <TrendingUp size={14} /> },
 ];
 
 export default function SocialSection({ currentUser, openPostId, onOpenPostHandled }) {
@@ -111,7 +111,7 @@ export default function SocialSection({ currentUser, openPostId, onOpenPostHandl
         <CampaignsTab campaigns={campaigns} posts={posts} onOpenCampaign={setCampaignEditor} onNewCampaign={() => setCampaignEditor("new")} />
       )}
       {subtab === "library" && <MediaLibraryTab currentUser={currentUser} />}
-      {subtab === "search" && !loading && <SearchConsoleTab posts={posts} onOpenPost={(post) => setPostEditor({ post })} />}
+      {subtab === "performance" && !loading && <SearchConsoleTab posts={posts} onOpenPost={(post) => setPostEditor({ post })} onReload={reloadAll} />}
 
       {postEditor && (
         <PostForm

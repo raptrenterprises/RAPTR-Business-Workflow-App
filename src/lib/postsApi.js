@@ -264,6 +264,12 @@ export async function setPostDate(id, publishDate) {
   if (error) throw error;
 }
 
+// Saves a blog post's published web address (this is what connects Search Console pages to the post).
+export async function setPostLiveUrl(id, liveUrl) {
+  const { error } = await supabase.from("posts").update({ live_url: (liveUrl || "").trim() || null }).eq("id", id);
+  if (error) throw error;
+}
+
 export async function setPostCampaign(id, campaignId) {
   const { error } = await supabase.from("posts").update({ campaign_id: campaignId || null }).eq("id", id);
   if (error) throw error;

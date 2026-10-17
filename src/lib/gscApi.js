@@ -47,6 +47,13 @@ export async function fetchGscPages(days) {
   return (data || []).map((r) => ({ page: r.page, clicks: Number(r.clicks), impressions: Number(r.impressions), position: r.avg_position === null ? null : Number(r.avg_position), topQuery: r.top_query }));
 }
 
+// Every page on the site for the last `days` days: clicks, impressions, average position, how many keywords lead to it.
+export async function fetchGscPageStats(days) {
+  const { data, error } = await supabase.rpc("gsc_page_stats", { p_days: days });
+  if (error) throw error;
+  return (data || []).map((r) => ({ page: r.page, clicks: Number(r.clicks), impressions: Number(r.impressions), position: r.avg_position === null ? null : Number(r.avg_position), keywordCount: Number(r.keyword_count), topQuery: r.top_query }));
+}
+
 // Asks the server to pull the latest numbers from Google now. Resolves { ok, message }.
 export async function runGscSync() {
   const { data } = await supabase.auth.getSession();

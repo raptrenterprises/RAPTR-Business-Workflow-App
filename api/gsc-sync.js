@@ -13,7 +13,7 @@
 
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { googleAccessToken, fetchSearchAnalytics, keywordsByPost, daysAgo, isoDay } from "./_gscLib.js";
+import { googleAccessToken, fetchSearchAnalytics, keywordsByPost, matchPagesToPosts, normalizeUrl, daysAgo, isoDay } from "./_gscLib.js";
 
 const sameSecret = (a, b) => {
   const x = Buffer.from(String(a));
@@ -34,6 +34,28 @@ async function pageAll(build) {
     if (data.length < 1000) break;
   }
   return rows;
+}
+
+// Blog posts with no published address yet: if Google now lists a page that clearly is that post, save the address on the
+// post so its keywords flow in without anyone pasting the link. Best effort; it never stops the rest of the sync.
+async function linkNewPosts(db) {
+  try {
+    const { data: pages, error } = await db.rpc("gsc_pages", { p_days: 480 });
+    if (error) throw error;
+    const { data: posts, error: e2 } = await db.from("posts").select("id, title, seo_title, status, live_url").eq("post_type", "Blog post");
+    if (e2) throw e2;
+    const claimed = new Set(posts.map((p) => normalizeUrl(p.live_url)).filter(Boolean));
+    const free = (pages || []).map((p) => p.page).filter((u) => !claimed.has(normalizeUrl(u)));
+    const waiting = posts.filter((p) => !String(p.live_url || "").trim());
+    const matches = matchPagesToPosts(waiting, free);
+    for (const m of matches) {
+      const { error: e3 } = await db.from("posts").update({ live_url: m.url }).eq("id", m.postId);
+      if (e3) throw e3;
+    }
+    return matches.length;
+  } catch (_) {
+    return 0;
+  }
 }
 
 // Replaces each blog post's Search Console keywords with the latest top 25 (last 30 days).
@@ -108,9 +130,10 @@ export default async function handler(req, res) {
       const { error } = await db.from("gsc_search_daily").upsert(rows.slice(i, i + 1000), { onConflict: "date,query,page" });
       if (error) throw error;
     }
+    const autoLinked = await linkNewPosts(db);
     const linked = await updatePostKeywords(db);
-    const message = `Pulled ${rows.length.toLocaleString("en-US")} rows (${startDate} to ${endDate}); refreshed ${linked.keywords} keywords on ${linked.posts} blog ${linked.posts === 1 ? "post" : "posts"}.`;
-    await setStatus(db, "ok", message, { startDate, endDate, rows: rows.length, ...linked, site, sa_email: sa.client_email });
+    const message = `Pulled ${rows.length.toLocaleString("en-US")} rows (${startDate} to ${endDate}); refreshed ${linked.keywords} keywords on ${linked.posts} blog ${linked.posts === 1 ? "post" : "posts"}.${autoLinked ? ` Matched ${autoLinked} new blog ${autoLinked === 1 ? "post" : "posts"} to ${autoLinked === 1 ? "its page" : "their pages"}.` : ""}`;
+    await setStatus(db, "ok", message, { startDate, endDate, rows: rows.length, ...linked, autoLinked, site, sa_email: sa.client_email });
     res.status(200).json({ ok: true, message });
   } catch (err) {
     const message = String(err.message || err);

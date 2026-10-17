@@ -58,6 +58,54 @@ export function normalizeUrl(u) {
   }
 }
 
+// How Squarespace turns a title into the end of a blog address: "Destination & Chateau Weddings!" -> "destination-amp-chteau-weddings".
+// Used only to line up a Search Console page with the blog post it belongs to.
+export function slugKey(text) {
+  return String(text || "").toLowerCase().replace(/&/g, " amp ").replace(/[-\u2013\u2014_/]+/g, " ").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim().replace(/ /g, "-");
+}
+
+// "https://x.com/blog/some-post/" -> "some-post"; anything that isn't a single blog post address -> "".
+export function pageSlug(url) {
+  try {
+    const parts = new URL(String(url).trim()).pathname.split("/").filter(Boolean);
+    return parts.length === 2 && parts[0].toLowerCase() === "blog" ? decodeURIComponent(parts[1]).toLowerCase() : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+// Lines up blog posts that have no published address yet with Search Console pages nobody has claimed.
+//   posts: [{ id, title, seo_title, status }]   pageUrls: [address]   ->  [{ postId, url }]
+// A page matches when its ending equals the post's title (or SEO title) the way Squarespace writes it. Failing that, a
+// LIVE post can still match a page whose words overlap strongly, but only when one page is clearly the best fit.
+export function matchPagesToPosts(posts, pageUrls) {
+  const pages = pageUrls.map((url) => ({ url, slug: pageSlug(url) })).filter((p) => p.slug);
+  const taken = new Set();
+  const matches = [];
+  const matched = new Set();
+  for (const post of posts) {
+    const keys = [slugKey(post.title), slugKey(post.seo_title)].filter(Boolean);
+    const hit = pages.find((p) => !taken.has(p.url) && keys.includes(p.slug));
+    if (hit) { matches.push({ postId: post.id, url: hit.url }); taken.add(hit.url); matched.add(post.id); }
+  }
+  for (const post of posts) {
+    if (matched.has(post.id) || post.status !== "live") continue;
+    const words = new Set(slugKey(post.title).split("-").filter(Boolean));
+    if (words.size < 3) continue;
+    let best = null; let bestScore = 0; let second = 0;
+    for (const p of pages) {
+      if (taken.has(p.url)) continue;
+      const pw = new Set(p.slug.split("-"));
+      let shared = 0;
+      words.forEach((w) => { if (pw.has(w)) shared += 1; });
+      const score = shared / (words.size + pw.size - shared);
+      if (score > bestScore) { second = bestScore; bestScore = score; best = p; } else if (score > second) second = score;
+    }
+    if (best && bestScore >= 0.75 && bestScore - second >= 0.15) { matches.push({ postId: post.id, url: best.url }); taken.add(best.url); }
+  }
+  return matches;
+}
+
 // For each blog post (with a live address), its top keywords over the given daily rows:
 // clicks and impressions summed, position weighted by impressions, click rate in percent.
 // posts: [{ id, live_url }]   rows: [{ query, page, clicks, impressions, position }]
